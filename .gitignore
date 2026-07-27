@@ -1,0 +1,6 @@
+.vscode
+.tmp
+node_modules
+dist
+src/visualTEST.ts
+src/___matrixDataViewDictFormatter___.ts

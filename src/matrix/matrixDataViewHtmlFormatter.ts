@@ -1,0 +1,479 @@
+'use strict';
+
+import powerbi from "powerbi-visuals-api";
+import { valueFormatter } from "powerbi-visuals-utils-formattingutils";
+import { plusIcon, minusIcon } from "./icons";
+
+export class MatrixDataviewHtmlFormatter {
+    public static formatDataViewMatrix(
+        matrix: powerbi.DataViewMatrix,
+        valueSources?: powerbi.DataViewMetadataColumn[],
+        collapsedNodes?: Set<string>,
+        maxRowLevel: number = 0,
+        forceExpandAll: boolean = false,
+        locale: string = 'ru-RU'
+    ): HTMLElement {
+        const htmlElement = document.createElement('div');
+        htmlElement.classList.add('datagrid');
+        const tableElement = document.createElement('table');
+        const theadElement = document.createElement('thead');
+        const tbodyElement = document.createElement('tbody');
+
+        let columnSourceIndices: number[] = [];
+        if (matrix.columns?.root) {
+            const leafNodes = this.collectLeafNodesInOrder(matrix.columns.root);
+            columnSourceIndices = leafNodes.map(node => node.levelSourceIndex !== undefined ? node.levelSourceIndex : -1);
+        }
+
+        // Извлекаем форматы для уровней строк (для дат)
+        const rowLevels = matrix.rows?.levels || [];
+        const rowLevelFormats: string[] = [];
+        for (let i = 0; i < rowLevels.length; i++) {
+            const source = rowLevels[i]?.sources?.[0];
+            rowLevelFormats.push(source?.format || '');
+        }
+
+        if (matrix.columns && matrix.rows) {
+            this.formatColumnHeaders(matrix.columns, matrix.rows, theadElement);
+        }
+
+        if (matrix.rows?.root) {
+            this.formatRowNodes(
+                matrix.rows.root,
+                tbodyElement,
+                matrix.columns,
+                valueSources,
+                columnSourceIndices,
+                collapsedNodes,
+                '',
+                forceExpandAll,
+                true,
+                maxRowLevel,
+                locale,
+                rowLevelFormats
+            );
+        }
+
+        let borderDiv = theadElement.querySelector('.thead-border');
+        if (!borderDiv) {
+            borderDiv = document.createElement('div');
+            borderDiv.className = 'thead-border';
+            (borderDiv as HTMLElement).style.position = 'absolute';
+            (borderDiv as HTMLElement).style.top = '0';
+            (borderDiv as HTMLElement).style.left = '0';
+            (borderDiv as HTMLElement).style.width = '100%';
+            (borderDiv as HTMLElement).style.height = '100%';
+            (borderDiv as HTMLElement).style.pointerEvents = 'none';
+            (borderDiv as HTMLElement).style.boxSizing = 'border-box';
+            (borderDiv as HTMLElement).style.zIndex = '2000';
+            theadElement.appendChild(borderDiv);
+        }
+
+        tableElement.appendChild(theadElement);
+        tableElement.appendChild(tbodyElement);
+        htmlElement.appendChild(tableElement);
+        return htmlElement;
+    }
+
+    private static formatColumnHeaders(
+        columns: powerbi.DataViewHierarchy,
+        rows: powerbi.DataViewHierarchy,
+        theadElement: HTMLElement
+    ): void {
+        if (!columns?.root?.children) return;
+
+        const columnLevels = columns?.levels?.filter(level =>
+            !level.sources.some(source => source.isMeasure)
+        );
+
+        for (let levelIndex = 0; levelIndex < columnLevels.length; levelIndex++) {
+            const row = document.createElement('tr');
+            let rowLevel = columnLevels.length - levelIndex;
+            row.classList.add('topRow');
+            row.setAttribute('data-level', rowLevel.toString());
+
+            this.addRowHeader(row, columnLevels[levelIndex]?.sources?.[0]?.displayName || '');
+            this.formatColumnLevel(columns.root, levelIndex, row);
+
+            let childrenNum: number = row.children.length > 0 ? row.children.length - 1 : 0;
+            row.setAttribute('data-children-num', childrenNum.toString());
+            theadElement.appendChild(row);
+        }
+
+        this.createMeasuresRow(columns, rows, theadElement, 0);
+    }
+
+    private static formatColumnLevel(
+        rootNode: powerbi.DataViewMatrixNode,
+        targetLevel: number,
+        row: HTMLTableRowElement,
+        currentLevel: number = 0
+    ): void {
+        if (!rootNode.children) return;
+
+        for (const child of rootNode.children) {
+            if (currentLevel === targetLevel) {
+                const leafCount = this.calculateLeafCount(child);
+                const displayText = child.isSubtotal ? 'Total' : (child.value != null ? String(child.value) : '');
+                const isSubtotal = child.isSubtotal;
+                const th = this.createColumnNode(displayText, leafCount, isSubtotal);
+                row.appendChild(th);
+            } else if (child.children) {
+                this.formatColumnLevel(child, targetLevel, row, currentLevel + 1);
+            }
+        }
+    }
+
+    private static calculateLeafCount(node: powerbi.DataViewMatrixNode): number {
+        if ((node as any).leafCount !== undefined) return (node as any).leafCount;
+        if (!node.children || node.children.length === 0) return 1;
+        let count = 0;
+        for (const child of node.children) {
+            count += this.calculateLeafCount(child);
+        }
+        return count;
+    }
+
+    private static createMeasuresRow(
+        columns: powerbi.DataViewHierarchy,
+        rows: powerbi.DataViewHierarchy,
+        theadElement: HTMLElement,
+        measLevel: number
+    ): void {
+        const measuresRow = document.createElement('tr');
+        measuresRow.classList.add('topRow');
+        measuresRow.setAttribute('data-level', measLevel.toString());
+
+        const rowHeaderName = rows?.levels[0]?.sources?.[0]?.displayName || '';
+        this.addRowHeader(measuresRow, rowHeaderName);
+
+        const measures = this.getAllMeasures(columns);
+        const leafNodes = this.collectLeafNodesInOrder(columns.root);
+
+        let counterOfHeaders: number = 0;
+        for (const leafNode of leafNodes) {
+            const measureIndex = leafNode.levelSourceIndex ?? 0;
+            const measureName = measures[measureIndex] || '';
+            const isSubtotal = this.isLeafNodeSubtotal(leafNode);
+            const th = this.createColumnNode(measureName, 0, isSubtotal);
+            th.setAttribute('id', counterOfHeaders.toString());
+            measuresRow.appendChild(th);
+            counterOfHeaders++;
+        }
+        measuresRow.setAttribute('data-children-num', counterOfHeaders.toString());
+        theadElement.appendChild(measuresRow);
+    }
+
+    private static collectLeafNodesInOrder(node: powerbi.DataViewMatrixNode): powerbi.DataViewMatrixNode[] {
+        const leafNodes: powerbi.DataViewMatrixNode[] = [];
+        this.traverseForLeafNodes(node, leafNodes);
+        return leafNodes;
+    }
+
+    private static traverseForLeafNodes(node: powerbi.DataViewMatrixNode, leafNodes: powerbi.DataViewMatrixNode[]): void {
+        if (!node.children || node.children.length === 0) {
+            leafNodes.push(node);
+        } else {
+            for (const child of node.children) {
+                this.traverseForLeafNodes(child, leafNodes);
+            }
+        }
+    }
+
+    private static isLeafNodeSubtotal(node: powerbi.DataViewMatrixNode): boolean {
+        return node.isSubtotal ||
+            (node.levelValues && node.levelValues.some(lv => lv.value === 'Total')) ||
+            node.value === 'Total';
+    }
+
+    private static getAllMeasures(columns: powerbi.DataViewHierarchy): string[] {
+        const measures: string[] = [];
+        const measuresLevel = columns?.levels?.find(level =>
+            level.sources.some(source => source.isMeasure)
+        );
+        if (measuresLevel) {
+            for (const source of measuresLevel.sources) {
+                if (source.isMeasure) {
+                    measures.push(source.displayName);
+                }
+            }
+        }
+        return measures;
+    }
+
+    private static addRowHeader(row: HTMLTableRowElement, text: string): void {
+        const th = document.createElement('th');
+        th.classList.add('rowsHeader');
+        th.textContent = text;
+        row.appendChild(th);
+    }
+
+    private static createColumnNode(text: string, colspan: number, isSubtotal: boolean = false): HTMLTableCellElement {
+        const th = document.createElement('th');
+        if (isSubtotal || text === 'Total') {
+            th.classList.add('totalColumn');
+        } else {
+            th.classList.add('formatColumnNodes');
+        }
+        th.textContent = text;
+        if (colspan > 0) {
+            th.setAttribute('colspan', colspan.toString());
+        }
+        return th;
+    }
+
+    private static formatRowNodes(
+        root: powerbi.DataViewMatrixNode,
+        topElement: HTMLElement,
+        columns: powerbi.DataViewHierarchy,
+        valueSources?: powerbi.DataViewMetadataColumn[],
+        columnSourceIndices?: number[],
+        collapsedNodes?: Set<string>,
+        path: string = '',
+        forceExpandAll: boolean = false,
+        showNonGrandTotal: boolean = true,
+        maxRowLevel: number = 0,
+        locale: string = 'ru-RU',
+        rowLevelFormats?: string[]
+    ) {
+        if (!root) return;
+
+        const level = (root.level !== undefined && root.level !== null) ? root.level : -1;
+
+        if (root.isSubtotal && level !== 0 && !showNonGrandTotal) {
+            return;
+        }
+
+        if (level >= 0) {
+            const trElement = document.createElement('tr');
+            trElement.setAttribute('data-level', level.toString());
+
+            if (root.identity) {
+                trElement.dataset.identity = JSON.stringify(root.identity);
+            }
+
+            const thElement = document.createElement('th');
+            thElement.setAttribute('class', 'formatRowNodes');
+            thElement.style.textAlign = 'left';
+
+            if (level > 0) {
+                const indentText = '\u00A0'.repeat(level * 4);
+                thElement.appendChild(document.createTextNode(indentText));
+            }
+
+            let displayValue = '';
+            if (root.isSubtotal) {
+                displayValue = 'Total';
+            } else {
+                let rawValue: any = undefined;
+                if (root.levelSourceIndex !== undefined && root.levelValues && root.levelValues.length > 0) {
+                    rawValue = root.levelValues[0].value;
+                } else if (root.value !== undefined) {
+                    rawValue = root.value;
+                }
+
+                if (rawValue !== undefined) {
+                    if (rawValue instanceof Date) {
+                        const formatStr = (rowLevelFormats && rowLevelFormats[level]) ? rowLevelFormats[level] : undefined;
+                        const options: any = {
+                            value: rawValue,
+                            cultureSelector: locale
+                        };
+                        if (formatStr) {
+                            options.format = formatStr;
+                        }
+                        const formatter = valueFormatter.create(options);
+                        displayValue = formatter.format(rawValue);
+                    } else {
+                        displayValue = String(rawValue);
+                    }
+                }
+            }
+
+            const canHaveChildren = level < maxRowLevel - 1 && !root.isSubtotal;
+            const isCollapsed = root.isCollapsed === true;
+
+            if (canHaveChildren) {
+                const expandBtn = document.createElement('span');
+                expandBtn.className = 'expandCollapseButton';
+                expandBtn.dataset.path = path;
+                // eslint-disable-next-line powerbi-visuals/no-inner-outer-html
+                expandBtn.innerHTML = isCollapsed ? plusIcon : minusIcon;
+
+                thElement.appendChild(expandBtn);
+                const spaceNode = document.createTextNode('\u00A0\u00A0');
+                thElement.appendChild(spaceNode);
+            }
+
+            const textSpan = document.createElement('span');
+            textSpan.className = 'row-header-text';
+            textSpan.appendChild(document.createTextNode(displayValue));
+            thElement.appendChild(textSpan);
+
+            trElement.appendChild(thElement);
+
+            if (root.isSubtotal) {
+                trElement.classList.add('totalRow');
+            } else {
+                trElement.classList.add('midRow');
+            }
+
+            const columnCount = columnSourceIndices ? columnSourceIndices.length : 0;
+            if (root.values && !(root.children && root.children.length > 0 && !root.isSubtotal)) {
+                this.addDataCells(trElement, root.values, columns, valueSources, columnSourceIndices, locale);
+            } else if (root.children && root.children.length > 0) {
+                const subtotalChild = root.children.find((child: any) => child.isSubtotal);
+                if (subtotalChild && subtotalChild.values) {
+                    this.addDataCells(trElement, subtotalChild.values, columns, valueSources, columnSourceIndices, locale);
+                } else {
+                    for (let i = 0; i < columnCount; i++) {
+                        const tdElement = document.createElement('td');
+                        tdElement.setAttribute('id', i.toString());
+                        trElement.appendChild(tdElement);
+                    }
+                }
+            } else {
+                for (let i = 0; i < columnCount; i++) {
+                    const tdElement = document.createElement('td');
+                    tdElement.setAttribute('id', i.toString());
+                    trElement.appendChild(tdElement);
+                }
+            }
+
+            topElement.appendChild(trElement);
+        }
+
+        if (root.children && root.children.length > 0 && !root.isSubtotal) {
+            const isCollapsed = root.isCollapsed === true;
+            const showChildren = forceExpandAll || !isCollapsed;
+            if (showChildren) {
+                for (const child of root.children) {
+                    const childValue = this.sanitizePathSegment(
+                        child.levelSourceIndex !== undefined ? String(child.levelSourceIndex) : String(child.value)
+                    );
+                    const childPath = path ? `${path}-${childValue}` : childValue;
+                    this.formatRowNodes(child, topElement, columns, valueSources, columnSourceIndices,
+                        collapsedNodes, childPath, forceExpandAll, showNonGrandTotal, maxRowLevel, locale, rowLevelFormats);
+                }
+            }
+        }
+    }
+
+    private static sanitizePathSegment(segment: string): string {
+        return segment.replace(/-/g, '~').replace(/ /g, '_');
+    }
+
+    private static addDataCells(
+        trElement: HTMLTableRowElement,
+        values: Record<string, powerbi.DataViewMatrixNodeValue>,
+        columns: powerbi.DataViewHierarchy,
+        valueSources?: powerbi.DataViewMetadataColumn[],
+        columnSourceIndices?: number[],
+        locale: string = 'ru-RU'
+    ): void {
+        const valueKeys = Object.keys(values).sort((a, b) => Number(a) - Number(b));
+        const columnTotalInfo = this.getColumnTotalInfo(columns);
+
+        for (let i = 0; i < valueKeys.length; i++) {
+            const key = valueKeys[i];
+            const value = values[key];
+            const tdElement = document.createElement('td');
+            tdElement.setAttribute('id', key);
+            const colIndex = Number(key);
+
+            if (columnTotalInfo[colIndex] === true) {
+                tdElement.classList.add('totalColumn');
+            }
+
+            if (value != null && value.value != null) {
+                let sourceIndex = value.valueSourceIndex;
+                if (sourceIndex === undefined) {
+                    sourceIndex = colIndex;
+                }
+                const formattedValue = this.formatValue(value.value, sourceIndex, valueSources, locale);
+                tdElement.appendChild(document.createTextNode(formattedValue));
+            }
+            trElement.appendChild(tdElement);
+        }
+    }
+
+    private static getColumnTotalInfo(columns: powerbi.DataViewHierarchy): boolean[] {
+        const totalInfo: boolean[] = [];
+        if (!columns?.root?.children) return totalInfo;
+        const leafNodes = this.collectLeafNodesInOrder(columns.root);
+        for (const leafNode of leafNodes) {
+            totalInfo.push(this.isLeafNodeSubtotal(leafNode));
+        }
+        return totalInfo;
+    }
+
+    private static formatValue(
+        rawValue: any,
+        valueSourceIndex: number,
+        valueSources?: powerbi.DataViewMetadataColumn[],
+        locale: string = 'ru-RU'
+    ): string {
+        if (rawValue === null || rawValue === undefined) return '';
+
+        if (typeof rawValue !== 'number') {
+            if (rawValue instanceof Date) {
+                return rawValue.toLocaleDateString(locale);
+            }
+            return String(rawValue);
+        }
+
+        if (valueSourceIndex === undefined || valueSourceIndex < 0 || !valueSources || !valueSources[valueSourceIndex]) {
+            return rawValue.toLocaleString(locale);
+        }
+
+        const valueSource = valueSources[valueSourceIndex];
+
+        try {
+            const formatString = valueSource.format || '0';
+
+            if (formatString.includes('%')) {
+                const options: any = {
+                    format: formatString,
+                    value: rawValue,
+                    cultureSelector: locale,
+                    displayUnit: 0
+                };
+                const formatter = valueFormatter.create(options);
+                return formatter.format(rawValue);
+            }
+
+            let decimalPlaces = 0;
+            const decimalMatch = /\.(0+)/.exec(formatString);
+            if (decimalMatch) {
+                decimalPlaces = decimalMatch[1].length;
+            }
+
+            let roundedValue: number;
+            if (decimalPlaces > 0) {
+                const factor = Math.pow(10, decimalPlaces);
+                roundedValue = Math.round(rawValue * factor) / factor;
+            } else {
+                roundedValue = Math.round(rawValue);
+            }
+
+            const needsThousandsSeparator = formatString.includes(',');
+
+            if (needsThousandsSeparator) {
+                return roundedValue.toLocaleString(locale, {
+                    minimumFractionDigits: decimalPlaces,
+                    maximumFractionDigits: decimalPlaces,
+                    useGrouping: true
+                });
+            } else {
+                return roundedValue.toLocaleString(locale, {
+                    minimumFractionDigits: decimalPlaces,
+                    maximumFractionDigits: decimalPlaces,
+                    useGrouping: false
+                });
+            }
+        } catch (error) {
+            console.warn('Error formatting value:', error);
+            return rawValue?.toLocaleString(locale);
+        }
+    }
+}
