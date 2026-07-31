@@ -1,24 +1,25 @@
-'use strict';
-import '../../style/excelDownloadModal.css';
+"use strict";
+import "../../style/excelDownloadModal.css";
 
 export class ExcelDownloader {
-    constructor() { }
+    constructor() {}
 
+    /**
+     * Публичный метод для экспорта HTML-таблицы в CSV.
+     * @param table - DOM-элемент таблицы (HTMLElement)
+     */
     public exportTable(table: HTMLElement): void {
         this.exportToCSV(table);
     }
 
     private exportToCSV(table: HTMLElement): void {
         const tbody = table.querySelector('tbody');
-        if (!tbody) {
-            console.warn('ExcelDownloader: tbody not found');
-            return;
-        }
+        if (!tbody) return;
 
-        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const rows = tbody.querySelectorAll('tr');
         if (rows.length === 0) return;
 
-        // Определяем максимальный уровень иерархии строк
+        // 1. Определяем максимальный уровень иерархии строк
         let maxLevel = 0;
         rows.forEach(row => {
             const levelAttr = row.getAttribute('data-level');
@@ -31,14 +32,14 @@ export class ExcelDownloader {
         });
         const headerColsCount = maxLevel + 1; // столбцов для заголовков строк
 
-        // Получаем заголовки из thead
+        // 2. Получаем заголовки из thead с учётом дополнительных столбцов
         const theadRows = table.querySelectorAll('thead tr');
         const csvRows: string[][] = [];
 
         theadRows.forEach(tr => {
             const cells: string[] = [];
             const ths = tr.querySelectorAll('th');
-
+            // Первый th – это rowsHeader (Year или ProductName)
             if (ths.length > 0) {
                 cells.push(this.extractCellText(ths[0] as HTMLElement));
                 // Добавляем пустые ячейки для дополнительных уровней строк
@@ -53,11 +54,10 @@ export class ExcelDownloader {
             csvRows.push(cells);
         });
 
-        // Обрабатываем строки из tbody
+        // 3. Обрабатываем строки данных из tbody
         rows.forEach(row => {
             const levelAttr = row.getAttribute('data-level');
             const level = levelAttr ? parseInt(levelAttr, 10) : 0;
-            const safeLevel = isNaN(level) ? 0 : level;
 
             // Получаем текст заголовка строки (из span.row-header-text)
             const headerCell = row.querySelector('th.formatRowNodes');
@@ -67,6 +67,7 @@ export class ExcelDownloader {
                 if (textSpan) {
                     headerText = textSpan.textContent || '';
                 } else {
+                    // fallback: удаляем иконки и неразрывные пробелы
                     headerText = (headerCell.textContent || '').replace(/[\u00A0]/g, ' ').trim();
                 }
             }
@@ -78,28 +79,30 @@ export class ExcelDownloader {
 
             // Формируем массив для заголовочных столбцов
             const headerCols: string[] = new Array(headerColsCount).fill('');
-            headerCols[safeLevel] = headerText;
+            headerCols[level] = headerText;
 
             // Собираем данные из td
             const dataCells: string[] = [];
             const tds = row.querySelectorAll('td');
             tds.forEach(td => {
-                let text = (td.textContent || '').replace(/[\r\n]+/g, ' ').trim();
+                let text = (td.textContent || '').replace(/[\r\n]+/g, ' ');
                 if (this.isNumeric(text)) {
                     text = text.replace(/[\s\u00A0]/g, '');
                 }
                 dataCells.push(text);
             });
 
+            // Объединяем
             const fullRow = headerCols.concat(dataCells);
             csvRows.push(fullRow);
         });
 
-        // Преобразуем в CSV
+        // 4. Преобразуем в CSV
         let csv = '';
         csvRows.forEach(row => {
             const escapedRow = row.map(cell => {
-                let text = cell ?? '';
+                let text = cell || '';
+                // Экранируем кавычки
                 text = text.replace(/"/g, '""');
                 // Если есть запятая, кавычки или точка с запятой – оборачиваем
                 if (text.includes(',') || text.includes('"') || text.includes(';')) {
@@ -116,7 +119,9 @@ export class ExcelDownloader {
         this.showDownloadModal(blobUrl, rows.length);
     }
 
-    // Проверяет, является ли текст числовым значением.
+    /**
+     * Проверяет, является ли текст числовым значением.
+     */
     private isNumeric(text: string): boolean {
         let cleaned = text.replace(/[\s\u00A0]/g, '');
         if (cleaned === '') return false;
@@ -124,16 +129,18 @@ export class ExcelDownloader {
         return /^-?\d+(\.\d+)?$/.test(normalized);
     }
 
-    // Извлекает текст из ячейки, очищая от пробелов, если это число.
+    /**
+     * Извлекает текст из ячейки, очищая от пробелов, если это число.
+     */
     private extractCellText(cell: HTMLElement): string {
-        let text = (cell.textContent || '').replace(/[\r\n]+/g, ' ').trim();
+        let text = (cell.textContent || '').replace(/[\r\n]+/g, ' ');
         if (this.isNumeric(text)) {
             text = text.replace(/[\s\u00A0]/g, '');
         }
         return text;
     }
 
-    private showDownloadModal(blobUrl: string, cntRows: number): void {
+    private showDownloadModal(blobUrl: string, cntRows: Number): void {
         const modal = document.createElement('div');
         modal.className = 'excel-download-modal';
 
@@ -148,8 +155,6 @@ export class ExcelDownloader {
         const instruction = document.createElement('p');
         instruction.textContent = 'Скопируйте ссылку ниже, вставьте в отдельную вкладку браузера и нажмите Enter';
         instruction.className = 'excel-download-modal-instruction';
-        instruction.style.marginBottom = '15px';
-        instruction.style.lineHeight = '1.4';
         modalContent.appendChild(instruction);
 
         const numberOfRowsToDownload = document.createElement('p');

@@ -1,130 +1,59 @@
-'use strict';
+import { formattingSettings } from "powerbi-visuals-utils-formattingmodel";
+import powerbi from "powerbi-visuals-api";
 
-import { formattingSettings } from 'powerbi-visuals-utils-formattingmodel';
-import powerbi from 'powerbi-visuals-api';
-import { DEFAULT_BACKGROUND_COLOR, DEFAULT_FONT_FAMILY, DEFAULT_TEXT_COLOR } from '../utils/constants';
+import FormattingSettingsCard = formattingSettings.SimpleCard;
+import FormattingSettingsCompositeCard = formattingSettings.CompositeCard;
+import FormattingSettingsSlice = formattingSettings.Slice;
+import FormattingSettingsModel = formattingSettings.Model;
 
-interface INumUpDownOptions {
-    minValue?: { type: powerbi.visuals.ValidatorType.Min; value: number };
-    maxValue?: { type: powerbi.visuals.ValidatorType.Max; value: number };
-    step?: number;
-}
-
-// Карточка Subtotals
-class SubtotalsCard extends formattingSettings.SimpleCard {
+// --- Карточка Subtotals ---
+class SubtotalsCard extends FormattingSettingsCard {
     public rowSubtotals = new formattingSettings.ToggleSwitch({
-        name: 'rowSubtotals',
-        displayName: 'Row subtotals',
-        value: true
+        name: "rowSubtotals", displayName: "Row subtotals", value: true
     });
     public columnSubtotals = new formattingSettings.ToggleSwitch({
-        name: 'columnSubtotals',
-        displayName: 'Column subtotals',
-        value: true
+        name: "columnSubtotals", displayName: "Column subtotals", value: true
     });
     public grandTotal = new formattingSettings.ToggleSwitch({
-        name: 'grandTotal',
-        displayName: 'Grand total',
-        value: true
+        name: "grandTotal", displayName: "Grand total", value: true
     });
     public nonGrandTotal = new formattingSettings.ToggleSwitch({
-        name: 'nonGrandTotal',
-        displayName: 'NonGrand total',
-        value: false
+        name: "nonGrandTotal", displayName: "NonGrand total", value: false
     });
-
-    public name = 'subTotals';
-    public displayName = 'Subtotals';
+    public name = "subTotals";
+    public displayName = "Subtotals";
     public slices = [this.rowSubtotals, this.columnSubtotals, this.grandTotal, this.nonGrandTotal];
 }
 
-// Hide empty
-class HideEmptyColsCard extends formattingSettings.SimpleCard {
+// --- Hide Empty Columns ---
+class HideEmptyColsCard extends FormattingSettingsCard {
     public hideColsLabel = new formattingSettings.ToggleSwitch({
-        name: 'hideColsLabel',
-        displayName: 'Hide Empty Columns',
-        value: false
+        name: "hideColsLabel", displayName: "Hide Empty Columns", value: false
     });
-
-    public name = 'hideEmptyCols';
-    public displayName = 'Hide Empty Columns';
+    public name = "hideEmptyCols";
+    public displayName = "Hide Empty Columns";
     public slices = [this.hideColsLabel];
 }
 
-// Horizontal gridlines
-class HorizontalGridlinesGroup extends formattingSettings.SimpleCard {
-    public color = new formattingSettings.ColorPicker({
-        name: 'horizontalColor',
-        displayName: 'Color',
-        value: { value: 'transparent' }
-    });
-    public width = new formattingSettings.NumUpDown({
-        name: 'horizontalWidth',
-        displayName: 'Width',
-        value: 1,
-        options: {
-            minValue: { type: powerbi.visuals.ValidatorType.Min, value: 0 },
-            maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 10 },
-            step: 1
-        } as INumUpDownOptions
-    });
-
-    public name = 'horizontalGroup';
-    public displayName = 'Horizontal gridlines';
+// --- Horizontal gridlines ---
+class HorizontalGridlinesGroup extends FormattingSettingsCard {
+    public color = new formattingSettings.ColorPicker({ name: "horizontalColor", displayName: "Color", value: { value: "transparent" } });
+    public width = new formattingSettings.NumUpDown({ name: "horizontalWidth", displayName: "Width", value: 1, options: { minValue: 0, maxValue: 10, step: 1 } as any });
+    public name = "horizontalGroup";
+    public displayName = "Horizontal gridlines";
     public slices = [this.color, this.width];
 }
 
-// Vertical gridlines
-class VerticalGridlinesGroup extends formattingSettings.SimpleCard {
-    public color = new formattingSettings.ColorPicker({
-        name: 'verticalColor',
-        displayName: 'Color',
-        value: { value: 'transparent' }
-    });
-    public width = new formattingSettings.NumUpDown({
-        name: 'verticalWidth',
-        displayName: 'Width',
-        value: 1,
-        options: {
-            minValue: { type: powerbi.visuals.ValidatorType.Min, value: 0 },
-            maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 10 },
-            step: 1
-        } as INumUpDownOptions
-    });
-
-    public name = 'verticalGroup';
-    public displayName = 'Vertical gridlines';
+// --- Vertical gridlines ---
+class VerticalGridlinesGroup extends FormattingSettingsCard {
+    public color = new formattingSettings.ColorPicker({ name: "verticalColor", displayName: "Color", value: { value: "transparent" } });
+    public width = new formattingSettings.NumUpDown({ name: "verticalWidth", displayName: "Width", value: 1, options: { minValue: 0, maxValue: 10, step: 1 } as any });
+    public name = "verticalGroup";
+    public displayName = "Vertical gridlines";
     public slices = [this.color, this.width];
 }
 
-class OptionsGroup extends formattingSettings.SimpleCard {
-    public rowPadding = new formattingSettings.NumUpDown({
-        name: 'rowPadding',
-        displayName: 'Row Padding',
-        value: 5,
-        options: {
-            minValue: { type: powerbi.visuals.ValidatorType.Min, value: 0 },
-            maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 50 },
-            step: 1
-        } as INumUpDownOptions
-    });
-
-    public name = 'optionsGroup';
-    public displayName = 'Options';
-    public slices = [this.rowPadding];
-}
-
-class GridCard extends formattingSettings.CompositeCard {
-    public horizontalGroup = new HorizontalGridlinesGroup();
-    public verticalGroup = new VerticalGridlinesGroup();
-    public optionsGroup = new OptionsGroup();
-
-    public name = 'grid';
-    public displayName = 'Grid';
-    public groups = [this.horizontalGroup, this.verticalGroup, this.optionsGroup];
-}
-
-// Border
+// --- Border ---
 class BorderSectionCard extends formattingSettings.SimpleCard {
     public positionTop: formattingSettings.ToggleSwitch;
     public positionBottom: formattingSettings.ToggleSwitch;
@@ -137,41 +66,37 @@ class BorderSectionCard extends formattingSettings.SimpleCard {
         super();
         this.name = sectionName;
         this.displayName = displayName;
-
+        
         this.positionTop = new formattingSettings.ToggleSwitch({
             name: `${sectionName}_top`,
-            displayName: 'Top',
+            displayName: "Top",
             value: false
         });
         this.positionBottom = new formattingSettings.ToggleSwitch({
             name: `${sectionName}_bottom`,
-            displayName: 'Bottom',
+            displayName: "Bottom",
             value: false
         });
         this.positionLeft = new formattingSettings.ToggleSwitch({
             name: `${sectionName}_left`,
-            displayName: 'Left',
+            displayName: "Left",
             value: false
         });
         this.positionRight = new formattingSettings.ToggleSwitch({
             name: `${sectionName}_right`,
-            displayName: 'Right',
+            displayName: "Right",
             value: false
         });
         this.color = new formattingSettings.ColorPicker({
             name: `${sectionName}_color`,
-            displayName: 'Color',
-            value: { value: DEFAULT_BACKGROUND_COLOR }
+            displayName: "Color",
+            value: { value: "#F1F1F1" }
         });
         this.width = new formattingSettings.NumUpDown({
             name: `${sectionName}_width`,
-            displayName: 'Width',
+            displayName: "Width",
             value: 1,
-            options: {
-                minValue: { type: powerbi.visuals.ValidatorType.Min, value: 0 },
-                maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 10 },
-                step: 1
-            } as INumUpDownOptions
+            options: { minValue: 0, maxValue: 10, step: 1 } as any
         });
         this.slices = [
             this.positionTop,
@@ -184,301 +109,234 @@ class BorderSectionCard extends formattingSettings.SimpleCard {
     }
 }
 
-// Карточка Border
+
+// --- Карточка Border ---
 class BordersCard extends formattingSettings.CompositeCard {
     public allGroup: BorderSectionCard;
     public columnHeaderGroup: BorderSectionCard;
     public rowHeaderGroup: BorderSectionCard;
     public valuesGroup: BorderSectionCard;
-
     public groups: formattingSettings.Cards[];
-    public name = 'borders';
-    public displayName = 'Borders';
+    public name = "borders";
+    public displayName = "Borders";
 
     constructor() {
         super();
-        this.allGroup = new BorderSectionCard('all', 'All');
-        this.columnHeaderGroup = new BorderSectionCard('columnHeader', 'Column header');
-        this.rowHeaderGroup = new BorderSectionCard('rowHeader', 'Row header');
-        this.valuesGroup = new BorderSectionCard('values', 'Values section');
+        this.allGroup = new BorderSectionCard("all", "All");
+        this.columnHeaderGroup = new BorderSectionCard("columnHeader", "Column header");
+        this.rowHeaderGroup = new BorderSectionCard("rowHeader", "Row header");
+        this.valuesGroup = new BorderSectionCard("values", "Values section");
         this.groups = [this.allGroup, this.columnHeaderGroup, this.rowHeaderGroup, this.valuesGroup];
     }
 }
 
-// Values
-class ValuesGroup extends formattingSettings.SimpleCard {
-    public font = new formattingSettings.FontControl({
-        name: 'font',
-        displayName: 'Font',
-        fontFamily: new formattingSettings.FontPicker({
-            name: 'fontFamily',
-            value: DEFAULT_FONT_FAMILY
-        }),
-        fontSize: new formattingSettings.NumUpDown({
-            name: 'fontSize',
-            value: 9,
-            options: {
-                minValue: { type: powerbi.visuals.ValidatorType.Min, value: 8 },
-                maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 72 },
-                step: 1
-            } as INumUpDownOptions
-        }),
-        bold: new formattingSettings.ToggleSwitch({ name: 'bold', value: false }),
-        italic: new formattingSettings.ToggleSwitch({ name: 'italic', value: false }),
-        underline: new formattingSettings.ToggleSwitch({ name: 'underline', value: false })
-    });
-    public textColor = new formattingSettings.ColorPicker({
-        name: 'textColor',
-        displayName: 'Text color',
-        value: { value: DEFAULT_TEXT_COLOR }
-    });
-    public backgroundColor = new formattingSettings.ColorPicker({
-        name: 'backgroundColor',
-        displayName: 'Background color',
-        value: { value: DEFAULT_BACKGROUND_COLOR }
-    });
-    public altTextColor = new formattingSettings.ColorPicker({
-        name: 'altTextColor',
-        displayName: 'Alternate text color',
-        value: { value: DEFAULT_TEXT_COLOR }
-    });
-    public altBackgroundColor = new formattingSettings.ColorPicker({
-        name: 'altBackgroundColor',
-        displayName: 'Alternate background color',
-        value: { value: DEFAULT_BACKGROUND_COLOR }
-    });
+// --- GridCard ---
+class GridCard extends FormattingSettingsCompositeCard {
+    public horizontalGroup: HorizontalGridlinesGroup;
+    public verticalGroup: VerticalGridlinesGroup;
+    //public borderCard: BorderCard;
+    public optionsGroup: OptionsGroup;
+    public groups: FormattingSettingsCard[];
 
-    public name = 'valuesGroup';
-    public displayName = 'Values';
+    public name = "grid";
+    public displayName = "Grid";
+
+    constructor() {
+        super();
+        this.horizontalGroup = new HorizontalGridlinesGroup();
+        this.verticalGroup = new VerticalGridlinesGroup();
+        //this.borderCard = new BorderCard();
+        this.optionsGroup = new OptionsGroup();
+        this.groups = [
+            this.horizontalGroup,
+            this.verticalGroup,
+            //this.borderCard,
+            this.optionsGroup
+        ];
+    }
+}
+
+// --- Options ---
+class OptionsGroup extends FormattingSettingsCard {
+    public rowPadding = new formattingSettings.NumUpDown({ name: "rowPadding", displayName: "Row Padding", value: 5, options: { minValue: 0, maxValue: 50, step: 1 } as any });
+    //public globalFontSize = new formattingSettings.NumUpDown({ name: "globalFontSize", displayName: "Global font size", value: 9, options: { minValue: 8, maxValue: 72, step: 1 } as any });
+    public name = "optionsGroup";
+    public displayName = "Options";
+    public slices = [this.rowPadding, /*this.globalFontSize*/];
+}
+
+
+// --- Values ---
+class ValuesGroup extends FormattingSettingsCard {
+    public font = new formattingSettings.FontControl({
+        name: "font", displayName: "Font",
+        fontFamily: new formattingSettings.FontPicker({ name: "fontFamily", value: "Segoe UI Semibold" }),
+        fontSize: new formattingSettings.NumUpDown({ name: "fontSize", value: 9, options: { minValue: 8, maxValue: 72, step: 1 } as any }),
+        bold: new formattingSettings.ToggleSwitch({ name: "bold", value: false }),
+        italic: new formattingSettings.ToggleSwitch({ name: "italic", value: false }),
+        underline: new formattingSettings.ToggleSwitch({ name: "underline", value: false })
+    });
+    public textColor = new formattingSettings.ColorPicker({ name: "textColor", displayName: "Text color", value: { value: "#1E2323" } });
+    public backgroundColor = new formattingSettings.ColorPicker({ name: "backgroundColor", displayName: "Background color", value: { value: "#FFFFFF" } });
+    public altTextColor = new formattingSettings.ColorPicker({ name: "altTextColor", displayName: "Alternate text color", value: { value: "#1E2323" } });
+    public altBackgroundColor = new formattingSettings.ColorPicker({ name: "altBackgroundColor", displayName: "Alternate background color", value: { value: "#FFFFFF" } });
+    public name = "valuesGroup";
+    public displayName = "Values";
     public slices = [this.font, this.textColor, this.backgroundColor, this.altTextColor, this.altBackgroundColor];
 }
-
-class ValuesCard extends formattingSettings.CompositeCard {
-    public valuesGroup = new ValuesGroup();
-    public groups = [this.valuesGroup];
-    public name = 'values';
-    public displayName = 'Values';
+class ValuesCard extends FormattingSettingsCompositeCard {
+    public valuesGroup: ValuesGroup;
+    public groups: FormattingSettingsCard[];
+    public name = "values";
+    public displayName = "Values";
+    constructor() {
+        super();
+        this.valuesGroup = new ValuesGroup();
+        this.groups = [this.valuesGroup];
+    }
 }
 
-class ColumnHeadersGroup extends formattingSettings.SimpleCard {
+// --- Column Headers ---
+class ColumnHeadersGroup extends FormattingSettingsCard {
     public font = new formattingSettings.FontControl({
-        name: 'font',
-        displayName: 'Font',
-        fontFamily: new formattingSettings.FontPicker({
-            name: 'fontFamily',
-            value: DEFAULT_FONT_FAMILY
-        }),
-        fontSize: new formattingSettings.NumUpDown({
-            name: 'fontSize',
-            value: 9,
-            options: {
-                minValue: { type: powerbi.visuals.ValidatorType.Min, value: 8 },
-                maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 72 },
-                step: 1
-            } as INumUpDownOptions
-        }),
-        bold: new formattingSettings.ToggleSwitch({ name: 'bold', value: true }),
-        italic: new formattingSettings.ToggleSwitch({ name: 'italic', value: false }),
-        underline: new formattingSettings.ToggleSwitch({ name: 'underline', value: false })
+        name: "font", displayName: "Font",
+        fontFamily: new formattingSettings.FontPicker({ name: "fontFamily", value: "Segoe UI" }),
+        fontSize: new formattingSettings.NumUpDown({ name: "fontSize", value: 9, options: { minValue: 8, maxValue: 72, step: 1 } as any }),
+        bold: new formattingSettings.ToggleSwitch({ name: "bold", value: true }),
+        italic: new formattingSettings.ToggleSwitch({ name: "italic", value: false }),
+        underline: new formattingSettings.ToggleSwitch({ name: "underline", value: false })
     });
-    public textColor = new formattingSettings.ColorPicker({
-        name: 'textColor',
-        displayName: 'Text color',
-        value: { value: DEFAULT_TEXT_COLOR }
-    });
-    public backgroundColor = new formattingSettings.ColorPicker({
-        name: 'backgroundColor',
-        displayName: 'Background color',
-        value: { value: DEFAULT_BACKGROUND_COLOR }
-    });
-    public headerAlignment = new formattingSettings.AlignmentGroup({
-        name: 'headerAlignment',
-        displayName: 'Header alignment',
-        value: 'left',
-        mode: powerbi.visuals.AlignmentGroupMode.Horizonal
-    });
-    public titleAlignment = new formattingSettings.AlignmentGroup({
-        name: 'titleAlignment',
-        displayName: 'Title alignment',
-        value: 'left',
-        mode: powerbi.visuals.AlignmentGroupMode.Horizonal
-    });
-    public name = 'columnHeadersGroup';
-    public displayName = 'Text';
+    public textColor = new formattingSettings.ColorPicker({ name: "textColor", displayName: "Text color", value: { value: "#1E2323" } });
+    public backgroundColor = new formattingSettings.ColorPicker({ name: "backgroundColor", displayName: "Background color", value: { value: "#FFFFFF" } });
+    public headerAlignment = new formattingSettings.AlignmentGroup({ name: "headerAlignment", displayName: "Header alignment", value: "left", mode: powerbi.visuals.AlignmentGroupMode.Horizonal });
+    public titleAlignment = new formattingSettings.AlignmentGroup({ name: "titleAlignment", displayName: "Title alignment", value: "left", mode: powerbi.visuals.AlignmentGroupMode.Horizonal });
+    public name = "columnHeadersGroup";
+    public displayName = "Text";
     public slices = [this.font, this.textColor, this.backgroundColor, this.headerAlignment, this.titleAlignment];
 }
 
-class ColumnHeadersRowHider extends formattingSettings.SimpleCard {
+class ColumnHeadersRowHider extends FormattingSettingsCard {
     public hideTechRowLabel = new formattingSettings.ToggleSwitch({
-        name: 'hideTechRowLabel',
-        displayName: 'Hide tech row',
+        name: "hideTechRowLabel",
+        displayName: "Hide tech row",
         value: false
     });
-    public name = 'hideTechRow';
-    public displayName = 'Hide tech row';
+    public name = "hideTechRow";
+    public displayName = "Hide tech row";
     public slices = [this.hideTechRowLabel];
 }
 
-class ColumnHeadersCard extends formattingSettings.CompositeCard {
-    public columnHeadersGroup = new ColumnHeadersGroup();
-    public hideTechRowCard = new ColumnHeadersRowHider();
-    public groups = [this.columnHeadersGroup, this.hideTechRowCard];
-    public name = 'columnHeaders';
-    public displayName = 'Column Headers';
+
+class ColumnHeadersCard extends FormattingSettingsCompositeCard {
+    public columnHeadersGroup: ColumnHeadersGroup;
+    public hideTechRowCard: ColumnHeadersRowHider;
+    public groups: FormattingSettingsCard[];
+    public name = "columnHeaders";
+    public displayName = "Column Headers";
+    constructor() {
+        super();
+        this.columnHeadersGroup = new ColumnHeadersGroup();
+        this.hideTechRowCard = new ColumnHeadersRowHider();
+        this.groups = [this.columnHeadersGroup, this.hideTechRowCard];
+    }
 }
 
-class RowHeadersGroup extends formattingSettings.SimpleCard {
+// --- Row Headers ---
+class RowHeadersGroup extends FormattingSettingsCard {
     public font = new formattingSettings.FontControl({
-        name: 'font',
-        displayName: 'Font',
-        fontFamily: new formattingSettings.FontPicker({
-            name: 'fontFamily',
-            value: DEFAULT_FONT_FAMILY
-        }),
-        fontSize: new formattingSettings.NumUpDown({
-            name: 'fontSize',
-            value: 9,
-            options: {
-                minValue: { type: powerbi.visuals.ValidatorType.Min, value: 8 },
-                maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 72 },
-                step: 1
-            } as INumUpDownOptions
-        }),
-        bold: new formattingSettings.ToggleSwitch({ name: 'bold', value: true }),
-        italic: new formattingSettings.ToggleSwitch({ name: 'italic', value: false }),
-        underline: new formattingSettings.ToggleSwitch({ name: 'underline', value: false })
+        name: "font", displayName: "Font",
+        fontFamily: new formattingSettings.FontPicker({ name: "fontFamily", value: "Segoe UI" }),
+        fontSize: new formattingSettings.NumUpDown({ name: "fontSize", value: 9, options: { minValue: 8, maxValue: 72, step: 1 } as any }),
+        bold: new formattingSettings.ToggleSwitch({ name: "bold", value: true }),
+        italic: new formattingSettings.ToggleSwitch({ name: "italic", value: false }),
+        underline: new formattingSettings.ToggleSwitch({ name: "underline", value: false })
     });
-
-    public textColor = new formattingSettings.ColorPicker({
-        name: 'textColor',
-        displayName: 'Text color',
-        value: { value: DEFAULT_TEXT_COLOR }
-    });
-    public backgroundColor = new formattingSettings.ColorPicker({
-        name: 'backgroundColor',
-        displayName: 'Background color',
-        value: { value: DEFAULT_BACKGROUND_COLOR }
-    });
+    public textColor = new formattingSettings.ColorPicker({ name: "textColor", displayName: "Text color", value: { value: "#1E2323" } });
+    public backgroundColor = new formattingSettings.ColorPicker({ name: "backgroundColor", displayName: "Background color", value: { value: "#FFFFFF" } });
     public brandedRowColor = new formattingSettings.ToggleSwitch({
-        name: 'brandedRowColor',
-        displayName: 'Branded row color',
+        name: "brandedRowColor",
+        displayName: "Branded row color",
         value: true
     });
-    public textAlignment = new formattingSettings.AlignmentGroup({
-        name: 'textAlignment',
-        displayName: 'Alignment',
-        value: 'left',
-        mode: powerbi.visuals.AlignmentGroupMode.Horizonal
-    });
-    public name = 'rowHeadersGroup';
-    public displayName = 'Text';
+    public textAlignment = new formattingSettings.AlignmentGroup({ name: "textAlignment", displayName: "Alignment", value: "left", mode: powerbi.visuals.AlignmentGroupMode.Horizonal });
+    public name = "rowHeadersGroup";
+    public displayName = "Text";
     public slices = [this.font, this.textColor, this.backgroundColor, this.brandedRowColor, this.textAlignment];
 }
 
-class RowHeadersCard extends formattingSettings.CompositeCard {
-    public rowHeadersGroup = new RowHeadersGroup();
-    public groups = [this.rowHeadersGroup];
-    public name = 'rowHeaders';
-    public displayName = 'Row Headers';
+class RowHeadersCard extends FormattingSettingsCompositeCard {
+    public rowHeadersGroup: RowHeadersGroup;
+    public groups: FormattingSettingsCard[];
+    public name = "rowHeaders";
+    public displayName = "Row Headers";
+    constructor() {
+        super();
+        this.rowHeadersGroup = new RowHeadersGroup();
+        this.groups = [this.rowHeadersGroup];
+    }
 }
 
-class ColumnGrandTotalGroup extends formattingSettings.SimpleCard {
+// --- Column Grand Total ---
+class ColumnGrandTotalGroup extends FormattingSettingsCard {
     public font = new formattingSettings.FontControl({
-        name: 'font',
-        displayName: 'Font',
-        fontFamily: new formattingSettings.FontPicker({
-            name: 'fontFamily',
-            value: 'Segoe UI'
-        }),
-        fontSize: new formattingSettings.NumUpDown({
-            name: 'fontSize',
-            value: 9,
-            options: {
-                minValue: { type: powerbi.visuals.ValidatorType.Min, value: 8 },
-                maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 72 },
-                step: 1
-            } as INumUpDownOptions
-        }),
-        bold: new formattingSettings.ToggleSwitch({ name: 'bold', value: true }),
-        italic: new formattingSettings.ToggleSwitch({ name: 'italic', value: false }),
-        underline: new formattingSettings.ToggleSwitch({ name: 'underline', value: false })
+        name: "font", displayName: "Font",
+        fontFamily: new formattingSettings.FontPicker({ name: "fontFamily", value: "Segoe UI" }),
+        fontSize: new formattingSettings.NumUpDown({ name: "fontSize", value: 9, options: { minValue: 8, maxValue: 72, step: 1 } as any }),
+        bold: new formattingSettings.ToggleSwitch({ name: "bold", value: true }),
+        italic: new formattingSettings.ToggleSwitch({ name: "italic", value: false }),
+        underline: new formattingSettings.ToggleSwitch({ name: "underline", value: false })
     });
-    public textColor = new formattingSettings.ColorPicker({
-        name: 'textColor',
-        displayName: 'Text color',
-        value: { value: DEFAULT_TEXT_COLOR }
-    });
-    public backgroundColor = new formattingSettings.ColorPicker({
-        name: 'backgroundColor',
-        displayName: 'Background color',
-        value: { value: DEFAULT_BACKGROUND_COLOR }
-    });
-    public applyToLabels = new formattingSettings.ToggleSwitch({
-        name: 'applyToLabels',
-        displayName: 'Apply to labels',
-        value: false
-    });
-    public name = 'columnGrandTotalGroup';
-    public displayName = 'Values';
+    public textColor = new formattingSettings.ColorPicker({ name: "textColor", displayName: "Text color", value: { value: "#1E2323" } });
+    public backgroundColor = new formattingSettings.ColorPicker({ name: "backgroundColor", displayName: "Background color", value: { value: "#FFFFFF" } });
+    public applyToLabels = new formattingSettings.ToggleSwitch({ name: "applyToLabels", displayName: "Apply to labels", value: false });
+    public name = "columnGrandTotalGroup";
+    public displayName = "Values";
     public slices = [this.font, this.textColor, this.backgroundColor, this.applyToLabels];
 }
 
-class ColumnGrandTotalCard extends formattingSettings.CompositeCard {
-    public columnGrandTotalGroup = new ColumnGrandTotalGroup();
-    public groups = [this.columnGrandTotalGroup];
-    public name = 'columnGrandTotal';
-    public displayName = 'Column grand total';
+class ColumnGrandTotalCard extends FormattingSettingsCompositeCard {
+    public columnGrandTotalGroup: ColumnGrandTotalGroup;
+    public groups: FormattingSettingsCard[];
+    public name = "columnGrandTotal";
+    public displayName = "Column grand total";
+    constructor() {
+        super();
+        this.columnGrandTotalGroup = new ColumnGrandTotalGroup();
+        this.groups = [this.columnGrandTotalGroup];
+    }
 }
 
-class RowGrandTotalGroup extends formattingSettings.SimpleCard {
+// --- Row Grand Total ---
+class RowGrandTotalGroup extends FormattingSettingsCard {
     public font = new formattingSettings.FontControl({
-        name: 'font',
-        displayName: 'Font',
-        fontFamily: new formattingSettings.FontPicker({
-            name: 'fontFamily',
-            value: DEFAULT_FONT_FAMILY
-        }),
-        fontSize: new formattingSettings.NumUpDown({
-            name: 'fontSize',
-            value: 9,
-            options: {
-                minValue: { type: powerbi.visuals.ValidatorType.Min, value: 8 },
-                maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 72 },
-                step: 1
-            } as INumUpDownOptions
-        }),
-        bold: new formattingSettings.ToggleSwitch({ name: 'bold', value: true }),
-        italic: new formattingSettings.ToggleSwitch({ name: 'italic', value: false }),
-        underline: new formattingSettings.ToggleSwitch({ name: 'underline', value: false })
+        name: "font", displayName: "Font",
+        fontFamily: new formattingSettings.FontPicker({ name: "fontFamily", value: "Segoe UI" }),
+        fontSize: new formattingSettings.NumUpDown({ name: "fontSize", value: 9, options: { minValue: 8, maxValue: 72, step: 1 } as any }),
+        bold: new formattingSettings.ToggleSwitch({ name: "bold", value: true }),
+        italic: new formattingSettings.ToggleSwitch({ name: "italic", value: false }),
+        underline: new formattingSettings.ToggleSwitch({ name: "underline", value: false })
     });
-    public textColor = new formattingSettings.ColorPicker({
-        name: 'textColor',
-        displayName: 'Text color',
-        value: { value: DEFAULT_TEXT_COLOR }
-    });
-    public backgroundColor = new formattingSettings.ColorPicker({
-        name: 'backgroundColor',
-        displayName: 'Background color',
-        value: { value: DEFAULT_BACKGROUND_COLOR }
-    });
-    public applyToLabels = new formattingSettings.ToggleSwitch({
-        name: 'applyToLabels',
-        displayName: 'Apply to labels',
-        value: false
-    });
-    public name = 'rowGrandTotalGroup';
-    public displayName = 'Values';
+    public textColor = new formattingSettings.ColorPicker({ name: "textColor", displayName: "Text color", value: { value: "#1E2323" } });
+    public backgroundColor = new formattingSettings.ColorPicker({ name: "backgroundColor", displayName: "Background color", value: { value: "#FFFFFF" } });
+    public applyToLabels = new formattingSettings.ToggleSwitch({ name: "applyToLabels", displayName: "Apply to labels", value: false });
+    public name = "rowGrandTotalGroup";
+    public displayName = "Values";
     public slices = [this.font, this.textColor, this.backgroundColor, this.applyToLabels];
 }
 
-class RowGrandTotalCard extends formattingSettings.CompositeCard {
-    public rowGrandTotalGroup = new RowGrandTotalGroup();
-    public groups = [this.rowGrandTotalGroup];
-    public name = 'rowGrandTotal';
-    public displayName = 'Row grand total';
+class RowGrandTotalCard extends FormattingSettingsCompositeCard {
+    public rowGrandTotalGroup: RowGrandTotalGroup;
+    public groups: FormattingSettingsCard[];
+    public name = "rowGrandTotal";
+    public displayName = "Row grand total";
+    constructor() {
+        super();
+        this.rowGrandTotalGroup = new RowGrandTotalGroup();
+        this.groups = [this.rowGrandTotalGroup];
+    }
 }
 
-export class MeasureCard extends formattingSettings.SimpleCard {
+export class MeasureCard extends FormattingSettingsCard {
     // Header
     public headerTextColor: formattingSettings.ColorPicker;
     public headerBackgroundColor: formattingSettings.ColorPicker;
@@ -494,65 +352,66 @@ export class MeasureCard extends formattingSettings.SimpleCard {
 
     constructor(measureName: string, displayName: string) {
         super();
-        this.name = measureName;        // 'measure_0'
-        this.displayName = displayName; // '#, Quantity sold'
-        const prefix = measureName;     // 'measure_0'
+        this.name = measureName;        // "measure_0"
+        this.displayName = displayName; // "#, Quantity sold"
+
+        const prefix = measureName;     // "measure_0"
 
         // Header
         this.headerTextColor = new formattingSettings.ColorPicker({
             name: `${prefix}_header_textColor`,
-            displayName: 'Header Text color',
-            value: { value: DEFAULT_TEXT_COLOR }
+            displayName: "Header Text color",
+            value: { value: "" } // "#1E2323"
         });
         this.headerBackgroundColor = new formattingSettings.ColorPicker({
             name: `${prefix}_header_backgroundColor`,
-            displayName: 'Header Background color',
-            value: { value: DEFAULT_BACKGROUND_COLOR }
+            displayName: "Header Background color",
+            value: { value: "" } // "#FFFFFF"
         });
         this.headerAlignment = new formattingSettings.AlignmentGroup({
             name: `${prefix}_header_alignment`,
-            displayName: 'Header Alignment',
-            value: '', // left
+            displayName: "Header Alignment",
+            value: "", // left
             mode: powerbi.visuals.AlignmentGroupMode.Horizonal
         });
 
         // Total
         this.totalTextColor = new formattingSettings.ColorPicker({
             name: `${prefix}_total_textColor`,
-            displayName: 'Total Text color',
-            value: { value: DEFAULT_TEXT_COLOR }
+            displayName: "Total Text color",
+            value: { value: "" } // "#1E2323"
         });
         this.totalBackgroundColor = new formattingSettings.ColorPicker({
             name: `${prefix}_total_backgroundColor`,
-            displayName: 'Total Background color',
-            value: { value: DEFAULT_BACKGROUND_COLOR }
+            displayName: "Total Background color",
+            value: { value: "" } // "#FFFFFF"
         });
         this.totalAlignment = new formattingSettings.AlignmentGroup({
             name: `${prefix}_total_alignment`,
-            displayName: 'Total Alignment',
-            value: '', // left
+            displayName: "Total Alignment",
+            value: "", //left
             mode: powerbi.visuals.AlignmentGroupMode.Horizonal
         });
 
         // Values
         this.valuesTextColor = new formattingSettings.ColorPicker({
             name: `${prefix}_values_textColor`,
-            displayName: 'Values Text color',
-            value: { value: DEFAULT_TEXT_COLOR }
+            displayName: "Values Text color",
+            value: { value: "" } // "#1E2323"
         });
         this.valuesBackgroundColor = new formattingSettings.ColorPicker({
             name: `${prefix}_values_backgroundColor`,
-            displayName: 'Values Background color',
-            value: { value: DEFAULT_BACKGROUND_COLOR }
+            displayName: "Values Background color",
+            value: { value: "" } // "#FFFFFF"
         });
         this.valuesAlignment = new formattingSettings.AlignmentGroup({
             name: `${prefix}_values_alignment`,
-            displayName: 'Values Alignment',
-            value: '', // left
+            displayName: "Values Alignment",
+            value: "", //left
             mode: powerbi.visuals.AlignmentGroupMode.Horizonal
         });
 
-        // All slices
+        // Все срезы в одном массиве
         this.slices = [
             this.headerTextColor,
             this.headerBackgroundColor,
@@ -567,13 +426,15 @@ export class MeasureCard extends formattingSettings.SimpleCard {
     }
 }
 
+
 class SpecificColumnCard extends formattingSettings.CompositeCard {
     public groups: formattingSettings.Cards[];
-    public name = 'specificColumn';
-    public displayName = 'Specific column';
+    public name = "specificColumn";
+    public displayName = "Specific column";
 
     constructor() {
         super();
+        // Создаём фиксированные 30 карточек мер один раз
         const groups: MeasureCard[] = [];
         for (let i = 0; i < 30; i++) {
             groups.push(new MeasureCard(`measure_${i}`, `Measure ${i + 1}`));
@@ -592,12 +453,13 @@ class SpecificColumnCard extends formattingSettings.CompositeCard {
             groups[i].visible = true;
             groups[i].displayName = measureNames[i];
         }
+        // НЕ пересоздаём массив groups
     }
 }
 
 export class ColumnWidthCard extends formattingSettings.SimpleCard {
-    public name = 'columnWidth';
-    public displayName = 'Column Width';
+    public name = "columnWidth";
+    public displayName = "Column Width";
     public slices: formattingSettings.Slice[] = [];
 
     private rowHeaderWidth: formattingSettings.NumUpDown;
@@ -605,28 +467,22 @@ export class ColumnWidthCard extends formattingSettings.SimpleCard {
 
     constructor() {
         super();
+        // Row header width
         this.rowHeaderWidth = new formattingSettings.NumUpDown({
-            name: 'rowHeader_width',
-            displayName: 'Row header width',
+            name: "rowHeader_width",
+            displayName: "Row header width",
             value: 300,
-            options: {
-                minValue: { type: powerbi.visuals.ValidatorType.Min, value: 50 },
-                maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 500 },
-                step: 5
-            } as INumUpDownOptions
+            options: { minValue: 50, maxValue: 500, step: 5 } as any
         });
         this.slices.push(this.rowHeaderWidth);
 
+        // Создаём 30 срезов для мер (один раз)
         for (let i = 0; i < 30; i++) {
             const widthSlice = new formattingSettings.NumUpDown({
                 name: `measure_${i}_width`,
                 displayName: `Measure ${i + 1} width`,
                 value: 120,
-                options: {
-                    minValue: { type: powerbi.visuals.ValidatorType.Min, value: 50 },
-                    maxValue: { type: powerbi.visuals.ValidatorType.Max, value: 500 },
-                    step: 5
-                } as INumUpDownOptions
+                options: { minValue: 50, maxValue: 500, step: 5 } as any
             });
             this.measureWidths.push(widthSlice);
             this.slices.push(widthSlice);
@@ -661,33 +517,25 @@ export class ColumnWidthCard extends formattingSettings.SimpleCard {
 }
 
 // --- Основная модель ---
-export class VisualSettings extends formattingSettings.Model {
-    public subTotals = new SubtotalsCard();
-    public hideEmptyCols = new HideEmptyColsCard();
-    public grid = new GridCard();
-    public borders = new BordersCard();
-    public values = new ValuesCard();
-    public columnHeaders = new ColumnHeadersCard();
-    public rowHeaders = new RowHeadersCard();
-    public columnGrandTotal = new ColumnGrandTotalCard();
-    public rowGrandTotal = new RowGrandTotalCard();
-    public specificColumn = new SpecificColumnCard();
-    public columnWidth = new ColumnWidthCard();
+export class VisualSettings extends FormattingSettingsModel {
+    public subTotals: SubtotalsCard = new SubtotalsCard();
+    public hideEmptyCols: HideEmptyColsCard = new HideEmptyColsCard();
+    public grid: GridCard = new GridCard();
+    public values: ValuesCard = new ValuesCard();
+    public columnHeaders: ColumnHeadersCard = new ColumnHeadersCard();
+    public rowHeaders: RowHeadersCard = new RowHeadersCard();
+    public columnGrandTotal: ColumnGrandTotalCard = new ColumnGrandTotalCard();
+    public rowGrandTotal: RowGrandTotalCard = new RowGrandTotalCard();
+    public specificColumn: SpecificColumnCard = new SpecificColumnCard();
+    public columnWidth: ColumnWidthCard = new ColumnWidthCard();
+    public borders: BordersCard = new BordersCard();
 
     constructor() {
         super();
         this.cards = [
-            this.subTotals,
-            this.hideEmptyCols,
-            this.grid,
-            this.borders,
-            this.values,
-            this.columnHeaders,
-            this.rowHeaders,
-            this.columnGrandTotal,
-            this.rowGrandTotal,
-            this.specificColumn,
-            this.columnWidth
+            this.subTotals, this.hideEmptyCols, this.grid,  //this.borders,
+            this.values, this.columnHeaders, this.rowHeaders, this.columnGrandTotal,
+            this.rowGrandTotal, this.specificColumn, this.columnWidth
         ];
     }
 }

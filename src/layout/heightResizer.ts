@@ -1,23 +1,19 @@
-'use strict';
-
 export class HeightResizer {
-    private container: HTMLElement;
-    private handle: HTMLElement | null = null;
-    private isResizing: boolean = false;
-    private startY: number = 0;
-    private startHeight: number = 0;
-    private readonly minHeight: number = 100;
-    private onResizeCallback: ((height: number) => void) | null = null;
+    private static resizing: boolean = false;
+    private static container: HTMLElement | null = null;
+    private static handle: HTMLElement | null = null;
+    private static startY: number = 0;
+    private static startHeight: number = 0;
+    private static minHeight: number = 100;
+    private static onResizeCallback: ((height: number) => void) | null = null;
 
-    constructor(container: HTMLElement, onResize?: (height: number) => void) {
-        this.container = container;
+    public static init(container: HTMLElement, onResize?: (height: number) => void): void {
+        this.cleanup();
         this.onResizeCallback = onResize || null;
-        this.init();
-    }
+        this.container = container;
 
-    public init(): void {
-        if (getComputedStyle(this.container).position === 'static') {
-            this.container.style.position = 'relative';
+        if (getComputedStyle(container).position === 'static') {
+            container.style.position = 'relative';
         }
 
         this.handle = document.createElement('div');
@@ -32,67 +28,56 @@ export class HeightResizer {
             z-index: 10000;
             pointer-events: auto;
         `;
+        container.appendChild(this.handle);
 
-        this.container.appendChild(this.handle);
+        //console.log('HeightResizer: handle created', this.handle);
 
-        this.handle.addEventListener('mousedown', this.onPointerDown);
-        document.addEventListener('mousemove', this.onPointerMove);
-        document.addEventListener('mouseup', this.onPointerUp);
-
-        this.handle.addEventListener('touchstart', this.onPointerDown, { passive: false });
-        document.addEventListener('touchmove', this.onPointerMove, { passive: false });
-        document.addEventListener('touchend', this.onPointerUp);
+        this.handle.addEventListener('mousedown', this.onMouseDown);
+        document.addEventListener('mousemove', this.onMouseMove);
+        document.addEventListener('mouseup', this.onMouseUp);
     }
 
-    private onPointerDown = (e: MouseEvent | TouchEvent): void => {
+    private static onMouseDown = (e: MouseEvent): void => {
         e.preventDefault();
-        if (!this.container || !this.handle) return;
-
-        this.isResizing = true;
-        this.startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        if (!this.container) return;
+        this.resizing = true;
+        this.startY = e.clientY;
         this.startHeight = this.container.offsetHeight;
-
         document.body.style.cursor = 'ns-resize';
         document.body.style.userSelect = 'none';
+        //console.log('HeightResizer: mousedown', this.startY, this.startHeight);
     };
 
-    private onPointerMove = (e: MouseEvent | TouchEvent): void => {
-        if (!this.isResizing || !this.container) return;
-        e.preventDefault();
-
-        const currentY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-        const diff = currentY - this.startY;
+    private static onMouseMove = (e: MouseEvent): void => {
+        if (!this.resizing || !this.container) return;
+        const diff = e.clientY - this.startY;
         const newHeight = Math.max(this.minHeight, this.startHeight + diff);
-
-        this.container.style.height = `${newHeight}px`;
-
+        this.container.style.height = newHeight + 'px';
         if (this.onResizeCallback) {
             this.onResizeCallback(newHeight);
         }
+        //console.log('HeightResizer: mousemove', newHeight);
     };
 
-    private onPointerUp = (): void => {
-        if (this.isResizing) {
-            this.isResizing = false;
+    private static onMouseUp = (e: MouseEvent): void => {
+        if (this.resizing) {
+            this.resizing = false;
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
+            //console.log('HeightResizer: mouseup');
         }
     };
 
-    public destroy(): void {
+    public static cleanup(): void {
         if (this.handle) {
-            this.handle.removeEventListener('mousedown', this.onPointerDown);
-            this.handle.removeEventListener('touchstart', this.onPointerDown);
+            this.handle.removeEventListener('mousedown', this.onMouseDown);
             this.handle.remove();
             this.handle = null;
         }
-
-        document.removeEventListener('mousemove', this.onPointerMove);
-        document.removeEventListener('touchmove', this.onPointerMove);
-        document.removeEventListener('mouseup', this.onPointerUp);
-        document.removeEventListener('touchend', this.onPointerUp);
-
-        this.container = null as any;
+        document.removeEventListener('mousemove', this.onMouseMove);
+        document.removeEventListener('mouseup', this.onMouseUp);
+        this.container = null;
+        this.resizing = false;
         this.onResizeCallback = null;
     }
 }

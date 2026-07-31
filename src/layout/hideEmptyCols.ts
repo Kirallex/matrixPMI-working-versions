@@ -1,95 +1,78 @@
-'use strict';
+"use strict"
 
 export class MatrixEmptyColumnsHider {
-    public hideEmptyColsMethod(container: HTMLElement): void {
-        const table = container.querySelector('.datagrid table');
-        if (!table) {
-            console.warn('Элемент .datagrid table не найден');
-            return;
-        }
+    public hideEmptyColsMethod(table: HTMLElement): void {
+        const datagrid = table.querySelector('.datagrid table');
+        let midRows = datagrid.getElementsByClassName('midRow');
+        let topRows = datagrid.getElementsByClassName('topRow');
+        let colCount:number = 0;
+        let currentRow: NodeListOf<HTMLTableCellElement>;
+        let currentCell: HTMLTableCellElement;
+        let emptyIds = [];
+        //console.log(colCount);
 
-        let midRows = table.getElementsByClassName('midRow');
-        let topRows = table.getElementsByClassName('topRow');
-
-        if (midRows.length === 0) return;
-
-        let colCount: number = 0; // colCount - количество колонок с данными в строке
-        for (let i = 0; i < midRows.length; i++) {
-            const tds = midRows[i].querySelectorAll('td');
-            if (tds.length > 0) {
-                colCount = tds.length;
+        for (let colNum = 0; colNum < midRows.length; colNum++) {
+            colCount = midRows[colNum].querySelectorAll('td').length;
+            if(colCount > 0) {
                 break;
             }
         }
 
-        if (colCount === 0) return;
+        //console.log("colCount", colCount);
 
-        let emptyIds: string[] = [];
+        for (let col = 0; col < colCount; col++) { //colCount - количество колонок с данными в строке
+            let isEmpty:boolean = true;
+            for (let i = 0; i < midRows.length; i++) { //midRows.length - количество строк с данными
+                //console.log("row cell", rows[i].querySelectorAll('td'));
+                currentRow = midRows[i].querySelectorAll('td'); //получаем массив с нумерацией с 0, но без заголовков строк
+                //console.log("currentRow", currentRow);
+                if(currentRow.length > 0) { //В current row может не быть тегов <td>, это мы проверяем здесь
+                    currentCell = currentRow[col];
+                    //console.log("currentCell.innerHTML", currentCell.innerHTML);
+                    const content = currentCell.innerText.replace('/&nbsp;/g', '').trim();
+                        if (content !== '' && content !== 'undefined') {
+                                    isEmpty = false;
+                                    break;
+                        }
+                }
+            }
 
-        // проверка колонок на пустоту
-        for (let col = 0; col < colCount; col++) {
-            let isEmpty = true;
-            let lastCellInCol: HTMLTableCellElement | null = null;
+            if(isEmpty && currentCell.className != "totalColumn") { //Проверяем, что это не ячейка из колонки с тоталами, т.к. тоталы мы скрываем отдельно
+                    emptyIds.push(currentCell.id);
+            }
+        } 
 
-            for (let i = 0; i < midRows.length; i++) {
-                let currentRow = midRows[i].querySelectorAll('td');
-                // существует ли ячейка по этому индексу
-                if (col < currentRow.length) {
-                    const cell = currentRow[col] as HTMLTableCellElement;
-                    lastCellInCol = cell;
+        for (let cellIdNum = 0; cellIdNum < emptyIds.length; cellIdNum++) {
+            let cellId = emptyIds[cellIdNum];
+            const elementsToHide = datagrid.querySelectorAll(`[id="${cellId}"]`);
+            elementsToHide.forEach((elem) => {
+                elem.remove();
+            });
+        }
 
-                    const content = cell.innerText
-                        .replace(/\u00A0/g, '')
-                        .replace(/&nbsp;/gi, '')
-                        .trim();
 
-                    if (content !== '') { // колонка не пустая
-                        isEmpty = false;
+        let zeroLevelChildrenNum = colCount - emptyIds.length;
+
+        for (let topRowNum = topRows.length - 1; topRowNum >= 0; topRowNum--) { //цикл обходит строки с заголовками от нижней строки к верхней
+            //console.log(topRows[topRowNum]);
+            //console.log(topRows[topRowNum].getAttribute('data-children-num'));
+            if(parseInt(topRows[topRowNum].getAttribute('data-level')) == 0) { //если data-level равен 0, то присваиваем количеству потомков значение zeroLevelChildrenNum
+                topRows[topRowNum].setAttribute('data-children-num', zeroLevelChildrenNum.toString());
+            }
+            else {
+                let childrenNums = parseInt(topRows[topRowNum].getAttribute('data-children-num')); //получаем количество потомков у данного заголовка
+                    if (childrenNums == 0 || typeof childrenNums === 'undefined') {
                         break;
                     }
-                }
-            }
+                let currentHeadersColSpan = zeroLevelChildrenNum/childrenNums; //вычисляем нужный colspan на данной строке заголовка, который равен кол-ву потомков нулевого уровня, разделенному на кол-во потомков текущего уровня
+                let headersOfColumns = topRows[topRowNum].getElementsByClassName('formatColumnNodes');
 
-            // если пустая, проверка, что это не total
-            if (isEmpty && lastCellInCol) {
-                const isTotalColumn = lastCellInCol.classList.contains('totalColumn');
-                
-                if (!isTotalColumn && lastCellInCol.id) {
-                    emptyIds.push(lastCellInCol.id);
+                for (let headerNum = 0; headerNum < headersOfColumns.length; headerNum++ ) {
+                    //console.log("headersOfColumns[headerNum]", headersOfColumns[headerNum]);
+                    headersOfColumns[headerNum].setAttribute('colspan',currentHeadersColSpan.toString()); //проставляем нужный colspan
                 }
             }
         }
 
-        // удаление пустых
-        for (const cellId of emptyIds) {
-            const elementsToRemove = table.querySelectorAll(`[id="${cellId}"]`);
-            elementsToRemove.forEach(elem => elem.remove());
-        }
-
-        const zeroLevelChildrenNum = Math.max(0, colCount - emptyIds.length);
-
-        for (let topRowNum = topRows.length - 1; topRowNum >= 0; topRowNum--) {
-            const topRow = topRows[topRowNum];
-            const dataLevel = topRow.getAttribute('data-level');
-
-            if (dataLevel !== null && parseInt(dataLevel, 10) === 0) {
-                topRow.setAttribute('data-children-num', zeroLevelChildrenNum.toString());
-            } else {
-                const dataChildrenNum = topRow.getAttribute('data-children-num');
-                const childrenNums = dataChildrenNum !== null ? parseInt(dataChildrenNum, 10) : NaN;
-
-                if (childrenNums === 0 || isNaN(childrenNums)) {
-                    break;
-                }
-
-                const rawColSpan = zeroLevelChildrenNum / childrenNums;
-                const currentHeadersColSpan = Math.max(1, Math.round(rawColSpan));
-
-                const headersOfColumns = topRow.getElementsByClassName('formatColumnNodes');
-                for (let headerNum = 0; headerNum < headersOfColumns.length; headerNum++) {
-                    headersOfColumns[headerNum].setAttribute('colspan', currentHeadersColSpan.toString());
-                }
-            }
-        }
     }
-}
+ }
