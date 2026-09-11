@@ -110,7 +110,7 @@ export class ExcelDownloader {
                 }
                 return text;
             });
-            csv += escapedRow.join('~') + '\n';
+            csv += escapedRow.join(';') + '\n';
         });
 
         const bom = '\uFEFF';
