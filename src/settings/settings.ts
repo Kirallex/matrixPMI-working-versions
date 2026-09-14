@@ -516,6 +516,206 @@ export class ColumnWidthCard extends formattingSettings.SimpleCard {
     }
 }
 
+
+export const CF_RULES_PER_MEASURE = 3;
+export const CF_MAX_MEASURES = 30;
+
+export enum CFRuleOperator {
+    Greater = "Greater",
+    GreaterOrEqual = "GreaterOrEqual",
+    Less = "Less",
+    LessOrEqual = "LessOrEqual",
+    Equal = "Equal",
+    NotEqual = "NotEqual",
+    Between = "Between"
+}
+
+export enum CFTextOperator {
+    Equals = "Equals",
+    NotEquals = "NotEquals",
+    Contains = "Contains",
+    StartsWith = "StartsWith",
+    EndsWith = "EndsWith"
+}
+
+/**
+ * Описание меры, передаётся из visual.ts в updateGroups().
+ */
+export interface CFMeasureInfo {
+    name: string;        // display name для UI
+    isNumeric: boolean;  // true для numeric/integer/decimal
+}
+
+/**
+ * Фабрика слайсов одного правила. Не добавляется в модель напрямую —
+ * её slices копируются в MeasureCFGroupCard.
+ */
+export class MeasureCFRuleCard extends FormattingSettingsCard {
+    public enabled: formattingSettings.ToggleSwitch;
+    public operator: formattingSettings.ItemDropdown;
+    public value1: formattingSettings.TextInput;
+    public value2: formattingSettings.TextInput;
+    public textOperator: formattingSettings.ItemDropdown;
+    public textValue: formattingSettings.TextInput;
+    public backgroundColor: formattingSettings.ColorPicker;
+    public fontColor: formattingSettings.ColorPicker;
+
+    constructor(measureIndex: number, ruleIndex: number) {
+        super();
+        const p = `cf_measure_${measureIndex}_rule_${ruleIndex}`;
+        const prefix = `Rule ${ruleIndex + 1}`;
+        this.name = p;
+        this.displayName = prefix;
+
+        this.enabled = new formattingSettings.ToggleSwitch({
+            name: `${p}_enabled`,
+            displayName: `${prefix} — Enable`,
+            value: false
+        });
+
+        this.operator = new formattingSettings.ItemDropdown({
+            name: `${p}_operator`,
+            displayName: `${prefix} — Operator`,
+            items: [
+                { value: CFRuleOperator.GreaterOrEqual, displayName: "≥" },
+                { value: CFRuleOperator.Greater,        displayName: ">" },
+                { value: CFRuleOperator.LessOrEqual,    displayName: "≤" },
+                { value: CFRuleOperator.Less,           displayName: "<" },
+                { value: CFRuleOperator.Equal,          displayName: "=" },
+                { value: CFRuleOperator.NotEqual,       displayName: "≠" },
+                { value: CFRuleOperator.Between,        displayName: "Between" }
+            ],
+            value: { value: CFRuleOperator.GreaterOrEqual, displayName: "≥" }
+        });
+
+        this.value1 = new formattingSettings.TextInput({
+            name: `${p}_value1`,
+            displayName: `${prefix} — Threshold`,
+            placeholder: "0.65",
+            value: "0"
+        });
+
+        this.value2 = new formattingSettings.TextInput({
+            name: `${p}_value2`,
+            displayName: `${prefix} — Upper threshold`,
+            placeholder: "0.65",
+            value: "0"
+        });
+
+        this.textOperator = new formattingSettings.ItemDropdown({
+            name: `${p}_textOperator`,
+            displayName: `${prefix} — Operator`,
+            items: [
+                { value: CFTextOperator.Equals,     displayName: "equals" },
+                { value: CFTextOperator.NotEquals,  displayName: "not equals" },
+                { value: CFTextOperator.Contains,   displayName: "contains" },
+                { value: CFTextOperator.StartsWith, displayName: "starts with" },
+                { value: CFTextOperator.EndsWith,   displayName: "ends with" }
+            ],
+            value: { value: CFTextOperator.Equals, displayName: "equals" }
+        });
+
+        this.textValue = new formattingSettings.TextInput({
+            name: `${p}_textValue`,
+            displayName: `${prefix} — Text value`,
+            placeholder: "Not ok",
+            value: ""
+        });
+
+        this.backgroundColor = new formattingSettings.ColorPicker({
+            name: `${p}_backgroundColor`,
+            displayName: `${prefix} — Background`,
+            value: { value: "" }
+        });
+
+        this.fontColor = new formattingSettings.ColorPicker({
+            name: `${p}_fontColor`,
+            displayName: `${prefix} — Font color`,
+            value: { value: "" }
+        });
+
+        this.slices = [
+            this.enabled,
+            this.operator, this.value1, this.value2,
+            this.textOperator, this.textValue,
+            this.backgroundColor, this.fontColor
+        ];
+    }
+}
+
+/**
+ * Карточка одной меры со всеми её правилами (SimpleCard).
+ * Скрывает numeric- или text-набор слайсов в зависимости от типа меры.
+ */
+export class MeasureCFGroupCard extends FormattingSettingsCard {
+    declare public name: string;
+    declare public displayName: string;
+    public slices: formattingSettings.Slice[] = [];
+
+    /** Имена слайсов numeric-набора, чтобы скрывать их для текстовых мер */
+    public numericSliceNames: string[] = [];
+    /** Имена слайсов text-набора */
+    public textSliceNames: string[] = [];
+
+    constructor(measureIndex: number) {
+        super();
+        this.name = `cf_measure_${measureIndex}`;
+        this.displayName = `Measure ${measureIndex + 1}`;
+
+        for (let r = 0; r < CF_RULES_PER_MEASURE; r++) {
+            const rule = new MeasureCFRuleCard(measureIndex, r);
+            this.slices.push(...(rule.slices ?? []));
+
+            const p = `cf_measure_${measureIndex}_rule_${r}`;
+            this.numericSliceNames.push(
+                `${p}_operator`, `${p}_value1`, `${p}_value2`
+            );
+            this.textSliceNames.push(
+                `${p}_textOperator`, `${p}_textValue`
+            );
+        }
+    }
+
+    public updateForMeasure(info: CFMeasureInfo): void {
+        this.displayName = info.name;
+        const isNumeric = info.isNumeric;
+
+        for (const slice of this.slices) {
+            const sliceName = (slice as any).name as string;
+            if (this.numericSliceNames.indexOf(sliceName) >= 0) {
+                slice.visible = isNumeric;
+            } else if (this.textSliceNames.indexOf(sliceName) >= 0) {
+                slice.visible = !isNumeric;
+            }
+        }
+    }
+}
+
+export class ConditionalFormattingCard extends FormattingSettingsCompositeCard {
+    public groups: MeasureCFGroupCard[] = [];
+    public name = "conditionalFormatting";
+    public displayName = "Conditional formatting";
+
+    constructor() {
+        super();
+        for (let i = 0; i < CF_MAX_MEASURES; i++) {
+            this.groups.push(new MeasureCFGroupCard(i));
+        }
+    }
+
+    public updateGroups(measures: CFMeasureInfo[]): void {
+        for (let i = 0; i < this.groups.length; i++) {
+            const g = this.groups[i];
+            if (i >= measures.length) {
+                g.visible = false;
+                continue;
+            }
+            g.visible = true;
+            g.updateForMeasure(measures[i]);
+        }
+    }
+}
+
 // --- Основная модель ---
 export class VisualSettings extends FormattingSettingsModel {
     public subTotals: SubtotalsCard = new SubtotalsCard();
@@ -529,13 +729,14 @@ export class VisualSettings extends FormattingSettingsModel {
     public specificColumn: SpecificColumnCard = new SpecificColumnCard();
     public columnWidth: ColumnWidthCard = new ColumnWidthCard();
     public borders: BordersCard = new BordersCard();
+    public conditionalFormatting: ConditionalFormattingCard = new ConditionalFormattingCard();
 
     constructor() {
         super();
         this.cards = [
             this.subTotals, this.hideEmptyCols, this.grid,  //this.borders,
             this.values, this.columnHeaders, this.rowHeaders, this.columnGrandTotal,
-            this.rowGrandTotal, this.specificColumn, this.columnWidth
+            this.rowGrandTotal, this.specificColumn, this.columnWidth, this.conditionalFormatting
         ];
     }
 }

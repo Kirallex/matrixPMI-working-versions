@@ -1,5 +1,5 @@
 "use strict";
-import './../style/visual.css';
+import '../style/visual.css';
 import powerbi from "powerbi-visuals-api";
 import { MatrixDataviewHtmlFormatter } from "./matrix/matrixDataViewHtmlFormatter";
 import { ExcelDownloader } from "./export/downloadExcel";
@@ -23,8 +23,9 @@ import { FormattingSettingsService } from "powerbi-visuals-utils-formattingmodel
 import { IMeasureSettings } from "./settings/measureSettings";
 import { applySpecificColumnSettings } from "./settings/specificColumnSettings";
 import { applyColumnWidthsFromSettings } from "./settings/columnWidth";
-import { VisualSettings, MeasureCard, ColumnWidthCard } from "./settings/settings";
+import { VisualSettings, MeasureCard, ColumnWidthCard, CFMeasureInfo } from "./settings/settings";
 import { applyBorderSettings } from "./settings/borderSettings";
+import { ConditionalFormatting } from "./settings/conditionalFormatting";
 
 export class Visual implements IVisual {
     private target: HTMLElement;
@@ -46,6 +47,7 @@ export class Visual implements IVisual {
     private formattingSettingsService: FormattingSettingsService;
 
     private measureNames: string[] = [];
+    private measureInfos: CFMeasureInfo[] = [];
 
     private savedScrollTop: number = 0;
     private savedScrollLeft: number = 0;
@@ -72,12 +74,21 @@ export class Visual implements IVisual {
             options.dataViews[0]
         ) as VisualSettings;
 
-        //console.log("currentDataView", this.currentDataView);
-
+        // --- Извлекаем меры и их типы ---
         const measures = this.currentDataView?.matrix?.columns?.levels?.find(level =>
             level.sources.some(source => source.isMeasure)
         )?.sources || [];
+
         this.measureNames = measures.map(m => m.displayName);
+
+        this.measureInfos = measures.map(m => {
+            const t: any = m.type || {};
+            const isNumeric = !!(t.numeric || t.integer || t.decimal);
+            return {
+                name: m.displayName || "",
+                isNumeric
+            };
+        });
 
         this.updateSpecificColumnGroups();
 
@@ -85,7 +96,6 @@ export class Visual implements IVisual {
         const rootNode = this.currentDataView.matrix?.rows?.root;
         const hasChildFields = rootNode?.childIdentityFields && rootNode.childIdentityFields.length > 0;
         const potentialMax = rowLevelsCount + (hasChildFields ? 1 : 0);
-        //console.log("this.maxRowLevelsEver", this.maxRowLevelsEver);
         this.maxRowLevelsEver = Math.max(this.maxRowLevelsEver, potentialMax);
 
         const rowCount = this.countRows(this.currentDataView);
@@ -122,8 +132,7 @@ export class Visual implements IVisual {
     public getFormattingModel(): powerbi.visuals.FormattingModel {
         try {
             this.updateSpecificColumnGroups();
-            const model = this.formattingSettingsService.buildFormattingModel(this.settings);
-            return model;
+            return this.formattingSettingsService.buildFormattingModel(this.settings);
         } catch (err) {
             console.error("Error in getFormattingModel:", err);
             return { cards: [] };
@@ -133,6 +142,7 @@ export class Visual implements IVisual {
     private updateSpecificColumnGroups(): void {
         (this.settings.specificColumn as any).updateGroups(this.measureNames);
         (this.settings.columnWidth as ColumnWidthCard).updateMeasureWidths(this.measureNames);
+        this.settings.conditionalFormatting.updateGroups(this.measureInfos);
     }
 
     private applySpecificColumnStyles(): void {
@@ -196,30 +206,25 @@ export class Visual implements IVisual {
      * Строит путь из identity индексов: "0-1-2" и ищет узел.
      */
     private findNodeByPath(root: powerbi.DataViewMatrixNode, path: string): powerbi.DataViewMatrixNode[] | null {
-        //console.log(`[findNodeByPath] searching for path: "${path}"`);
         if (!path) return [root];
         const parts = path.split("-");
         const nodePath: powerbi.DataViewMatrixNode[] = [root];
         let current = root;
         for (const rawPart of parts) {
-            const part = rawPart.replace(/~/g, "-").replace(/_/g, " ");   // декодируем
+            const part = rawPart.replace(/~/g, "-").replace(/_/g, " ");
             if (!current.children) {
-                //console.warn(`[findNodeByPath] no children at part: ${part}`);
                 return null;
             }
             const child = current.children.find(c => {
                 const nodeValue = c.levelSourceIndex !== undefined ? String(c.levelSourceIndex) : String(c.value);
-                //console.log(`[findNodeByPath] comparing part "${part}" with nodeValue "${nodeValue}"`);
                 return nodeValue === part;
             });
             if (!child) {
-                //console.warn(`[findNodeByPath] child not found for part: ${part}`);
                 return null;
             }
             nodePath.push(child);
             current = child;
         }
-        //console.log(`[findNodeByPath] found path with ${nodePath.length} nodes`);
         return nodePath;
     }
 
@@ -295,6 +300,13 @@ export class Visual implements IVisual {
             this.applySpecificColumnStyles();
             this.moveGrandTotalToBottom(formattedMatrix);
 
+            // CF применяется ПОСЛЕ базовых стилей — имеет приоритет
+            ConditionalFormatting.applyRules(
+                formattedMatrix,
+                this.settings.conditionalFormatting,
+                this.measureInfos
+            );
+
             const table = formattedMatrix.querySelector("table");
             if (table) {
                 const columnWidthCard = this.settings.columnWidth as ColumnWidthCard;
@@ -337,15 +349,11 @@ export class Visual implements IVisual {
                 e.stopPropagation();
 
                 const path = expandBtn.dataset.path;
-                //console.log(`[click] button path: ${path}`);
                 if (!path) return;
 
                 const rootNode = this.currentDataView.matrix!.rows!.root;
                 const nodePath = this.findNodeByPath(rootNode, path);
-                if (!nodePath) {
-                    //console.warn("[click] nodePath is null, aborting toggle");
-                    return;
-                }
+                if (!nodePath) return;
 
                 const levels = this.currentDataView.matrix!.rows!.levels;
                 let builder = this.host.createSelectionIdBuilder();
@@ -353,7 +361,6 @@ export class Visual implements IVisual {
                     builder = builder.withMatrixNode(node, levels);
                 }
                 const selectionId: ISelectionId = builder.createSelectionId();
-                //console.log("[click] toggling expand/collapse");
                 this.selectionManager.toggleExpandCollapse(selectionId);
             });
 
@@ -363,7 +370,7 @@ export class Visual implements IVisual {
         }
     }
 
-    // Экспорт (без изменений)
+    // Экспорт
     private handleExportClick(cntRows: number): void {
         if (this.isExporting) return;
         console.log("=== Starting data export process ===");
@@ -372,7 +379,6 @@ export class Visual implements IVisual {
             this.exportButton.disabled = true;
             this.exportButton.textContent = "Loading data...";
         }
-        // Если все данные уже загружены или сегментов больше нет
         if (this.allDataLoaded || !this.currentDataView.metadata?.segment) {
             this.exportDataView(cntRows);
             return;

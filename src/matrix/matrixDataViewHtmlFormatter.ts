@@ -378,6 +378,12 @@ export class MatrixDataviewHtmlFormatter {
             tdElement.setAttribute('id', key);
             const colIndex = parseInt(key);
 
+            // внутри addDataCells, после создания tdElement:
+            if (value.objects) {
+                (tdElement as any).__cfObjects = value.objects;
+                tdElement.dataset.hasCf = "1";
+            }
+
             if (columnTotalInfo[colIndex]) {
                 tdElement.classList.add('totalColumn');
             }
