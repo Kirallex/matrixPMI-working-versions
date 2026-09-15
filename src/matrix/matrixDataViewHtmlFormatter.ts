@@ -72,53 +72,108 @@ export class MatrixDataviewHtmlFormatter {
     }
 
     private static formatColumnHeaders(
-        columns: powerbi.DataViewHierarchy,
-        rows: powerbi.DataViewHierarchy,
-        theadElement: HTMLElement,
-        valueSources?: powerbi.DataViewMetadataColumn[]   // <-- новое
-    ): void {
-        if (!columns?.root?.children) return;
+    columns: powerbi.DataViewHierarchy,
+    rows: powerbi.DataViewHierarchy,
+    theadElement: HTMLElement,
+    valueSources?: powerbi.DataViewMetadataColumn[]
+): void {
+    if (!columns?.root?.children) return;
 
-        const columnLevels = columns.levels.filter(level =>
-            !level.sources.some(source => source.isMeasure)
+    const columnLevels = columns.levels.filter(level =>
+        !level.sources.some(source => source.isMeasure)
+    );
+
+    for (let levelIndex = 0; levelIndex < columnLevels.length; levelIndex++) {
+        const row = document.createElement('tr');
+        const rowLevel = columnLevels.length - levelIndex;
+        row.classList.add('topRow');
+        row.setAttribute('data-level', rowLevel.toString());
+
+        const source = columnLevels[levelIndex]?.sources?.[0];
+        this.addRowHeader(row, source?.displayName || '');
+
+        const formatStr = source?.format || '';
+        const isDateTime = !!source?.type?.dateTime;
+
+        this.formatColumnLevel(
+            columns.root, levelIndex, row, 0, formatStr, isDateTime
         );
 
-        for (let levelIndex = 0; levelIndex < columnLevels.length; levelIndex++) {
-            const row = document.createElement('tr');
-            let rowLevel = columnLevels.length - levelIndex;
-            row.classList.add('topRow');
-            row.setAttribute('data-level', rowLevel.toString());
-            let childrenNum: number;
-            this.addRowHeader(row, columnLevels[levelIndex]?.sources[0]?.displayName || '');
-            this.formatColumnLevel(columns.root, levelIndex, row);
-            childrenNum = row.children.length > 0 ? row.children.length - 1 : 0;
-            row.setAttribute('data-children-num', childrenNum.toString());
-            theadElement.appendChild(row);
-        }
-
-        // <-- ПРОКИДЫВАЕМ valueSources дальше
-        this.createMeasuresRow(columns, rows, theadElement, 0, valueSources);
+        const childrenNum = row.children.length > 0 ? row.children.length - 1 : 0;
+        row.setAttribute('data-children-num', childrenNum.toString());
+        theadElement.appendChild(row);
     }
+
+    this.createMeasuresRow(columns, rows, theadElement, 0, valueSources);
+}
 
     private static formatColumnLevel(
         rootNode: powerbi.DataViewMatrixNode,
         targetLevel: number,
         row: HTMLTableRowElement,
-        currentLevel: number = 0
+        currentLevel: number = 0,
+        formatStr: string = '',
+        isDateTime: boolean = false
     ): void {
         if (!rootNode.children) return;
 
         for (const child of rootNode.children) {
             if (currentLevel === targetLevel) {
                 const leafCount = this.calculateLeafCount(child);
-                const displayText = child.isSubtotal ? 'Total' : (child.value?.toString() || '');
+                const displayText = child.isSubtotal
+                    ? 'Total'
+                    : this.formatColumnValue(child, formatStr, isDateTime);
                 const isSubtotal = child.isSubtotal;
                 const th = this.createColumnNode(displayText, leafCount, isSubtotal);
                 row.appendChild(th);
             } else if (child.children) {
-                this.formatColumnLevel(child, targetLevel, row, currentLevel + 1);
+                this.formatColumnLevel(
+                    child, targetLevel, row, currentLevel + 1, formatStr, isDateTime
+                );
             }
         }
+    }
+
+    private static formatColumnValue(
+        node: powerbi.DataViewMatrixNode,
+        formatStr: string,
+        isDateTime: boolean
+    ): string {
+        const raw = node.value;
+        if (raw === undefined || raw === null) return '';
+
+        const isDateValue = isDateTime || (node as any).isDate === true;
+
+        if (isDateValue) {
+            try {
+                let dateVal: Date;
+                if (raw instanceof Date) {
+                    dateVal = raw;
+                } else if (typeof raw === 'string') {
+                    dateVal = new Date(raw);
+                } else if (typeof raw === 'number') {
+                    dateVal = new Date(raw);
+                } else {
+                    return String(raw);
+                }
+                if (isNaN(dateVal.getTime())) return String(raw);
+
+                const options: any = {
+                    value: dateVal,
+                    cultureSelector: 'ru-RU'
+                };
+                if (formatStr) {
+                    options.format = formatStr;
+                }
+                const formatter = valueFormatter.create(options);
+                return formatter.format(dateVal);
+            } catch (e) {
+                console.warn('Error formatting date column value:', e);
+                return String(raw);
+            }
+        }
+
+        return String(raw);
     }
 
     private static calculateLeafCount(node: any): number {
