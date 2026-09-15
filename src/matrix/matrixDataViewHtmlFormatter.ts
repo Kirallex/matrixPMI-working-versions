@@ -31,7 +31,10 @@ export class MatrixDataviewHtmlFormatter {
             rowLevelFormats.push(source?.format || '');
         }
 
-        this.formatColumnHeaders(matrix.columns, matrix.rows, theadElement);
+        // <-- ПРОКИДЫВАЕМ valueSources, чтобы getAllMeasures мог найти меры
+        //     даже когда в columns.levels нет уровня мер (одна мера)
+        this.formatColumnHeaders(matrix.columns, matrix.rows, theadElement, valueSources);
+
         this.formatRowNodes(
             matrix.rows.root,
             tbodyElement,
@@ -71,7 +74,8 @@ export class MatrixDataviewHtmlFormatter {
     private static formatColumnHeaders(
         columns: powerbi.DataViewHierarchy,
         rows: powerbi.DataViewHierarchy,
-        theadElement: HTMLElement
+        theadElement: HTMLElement,
+        valueSources?: powerbi.DataViewMetadataColumn[]   // <-- новое
     ): void {
         if (!columns?.root?.children) return;
 
@@ -92,7 +96,8 @@ export class MatrixDataviewHtmlFormatter {
             theadElement.appendChild(row);
         }
 
-        this.createMeasuresRow(columns, rows, theadElement, 0);
+        // <-- ПРОКИДЫВАЕМ valueSources дальше
+        this.createMeasuresRow(columns, rows, theadElement, 0, valueSources);
     }
 
     private static formatColumnLevel(
@@ -130,7 +135,8 @@ export class MatrixDataviewHtmlFormatter {
         columns: powerbi.DataViewHierarchy,
         rows: powerbi.DataViewHierarchy,
         theadElement: HTMLElement,
-        measLevel: number
+        measLevel: number,
+        valueSources?: powerbi.DataViewMetadataColumn[]   // <-- новое
     ): void {
         const measuresRow = document.createElement('tr');
         measuresRow.classList.add('topRow');
@@ -139,13 +145,16 @@ export class MatrixDataviewHtmlFormatter {
         const rowHeaderName = rows?.levels[0]?.sources[0]?.displayName || '';
         this.addRowHeader(measuresRow, rowHeaderName);
 
-        const measures = this.getAllMeasures(columns);
+        // getAllMeasures теперь сам умеет работать с одной мерой
+        const measures = this.getAllMeasures(columns, valueSources);
         const leafNodes = this.collectLeafNodesInOrder(columns.root);
 
         let counterOfHeaders: number = 0;
         for (const leafNode of leafNodes) {
-            const measureIndex = leafNode.levelSourceIndex || 0;
-            const measureName = measures[measureIndex] || '';
+            const measureIndex = (leafNode as any).levelSourceIndex ?? 0;
+            const measureName = measures[measureIndex]
+                ?? measures[0]
+                ?? '';
             const isSubtotal = this.isLeafNodeSubtotal(leafNode);
             const th = this.createColumnNode(measureName, 0, isSubtotal);
             th.setAttribute('id', counterOfHeaders.toString());
@@ -178,8 +187,20 @@ export class MatrixDataviewHtmlFormatter {
             node.value === 'Total';
     }
 
-    private static getAllMeasures(columns: powerbi.DataViewHierarchy): string[] {
+    /**
+     * Извлекает displayName мер — аналогично getCurrentMeasures() в visual.ts.
+     *
+     * 1) Сначала ищем уровень мер в columns.levels (работает для 2+ мер).
+     * 2) Если такого уровня нет (в визуале всего одна мера) — берём меры
+     *    из valueSources.
+     */
+    private static getAllMeasures(
+        columns: powerbi.DataViewHierarchy,
+        valueSources?: powerbi.DataViewMetadataColumn[]
+    ): string[] {
         const measures: string[] = [];
+
+        // 1) Основной путь: уровень мер в columns.levels
         const measuresLevel = columns.levels.find(level =>
             level.sources.some(source => source.isMeasure)
         );
@@ -190,6 +211,16 @@ export class MatrixDataviewHtmlFormatter {
                 }
             }
         }
+
+        // 2) Fallback: значение меры приходит через valueSources
+        if (measures.length === 0 && valueSources && valueSources.length > 0) {
+            for (const vs of valueSources) {
+                if (vs.isMeasure || (vs.roles && (vs.roles as any).Value)) {
+                    measures.push(vs.displayName);
+                }
+            }
+        }
+
         return measures;
     }
 
@@ -286,15 +317,13 @@ export class MatrixDataviewHtmlFormatter {
                 }
             }
 
-            const canHaveChildren = level < maxRowLevel - 1 && !root.isSubtotal; //level < maxRowLevel - 1 && !root.isSubtotal;
+            const canHaveChildren = level < maxRowLevel - 1 && !root.isSubtotal;
             const isCollapsed = root.isCollapsed === true;
 
             if (canHaveChildren) {
                 const expandBtn = document.createElement('span');
                 expandBtn.className = 'expandCollapseButton';
                 expandBtn.dataset.path = path;
-                // expandBtn.setAttribute("level-custom", level);
-                // expandBtn.setAttribute("max-Row-Level", maxRowLevel.toString());
                 expandBtn.innerHTML = isCollapsed ? plusIcon : minusIcon;
 
                 thElement.appendChild(expandBtn);
@@ -378,7 +407,6 @@ export class MatrixDataviewHtmlFormatter {
             tdElement.setAttribute('id', key);
             const colIndex = parseInt(key);
 
-            // внутри addDataCells, после создания tdElement:
             if (value.objects) {
                 (tdElement as any).__cfObjects = value.objects;
                 tdElement.dataset.hasCf = "1";
@@ -411,23 +439,18 @@ export class MatrixDataviewHtmlFormatter {
     }
 
     private static formatValue(rawValue: any, valueSourceIndex: number, valueSources?: any[]): string {
-        // 1. Обработка null/undefined
         if (rawValue == null) {
             return '';
         }
 
-        // 2. Если значение – строка, возвращаем её без изменений
         if (typeof rawValue === 'string') {
             return rawValue;
         }
 
-        // 3. Если значение – не число (например, boolean, объект и т.п.) – приводим к строке
         if (typeof rawValue !== 'number') {
             return String(rawValue);
         }
 
-        // 4. Далее идёт существующая логика для чисел
-        // (она же обрабатывает и даты, если они приходят как число)
         if (valueSourceIndex === undefined || valueSourceIndex < 0 || !valueSources || !valueSources[valueSourceIndex]) {
             return rawValue?.toLocaleString('ru-RU') || '';
         }

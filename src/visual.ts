@@ -74,11 +74,8 @@ export class Visual implements IVisual {
             options.dataViews[0]
         ) as VisualSettings;
 
-        // --- Извлекаем меры и их типы ---
-        const measures = this.currentDataView?.matrix?.columns?.levels?.find(level =>
-            level.sources.some(source => source.isMeasure)
-        )?.sources || [];
-
+        // --- Извлекаем меры (работает и для одной, и для нескольких) ---
+        const measures = this.getCurrentMeasures();
         this.measureNames = measures.map(m => m.displayName);
 
         this.measureInfos = measures.map(m => {
@@ -129,8 +126,46 @@ export class Visual implements IVisual {
         this.renderVisualization(rowCount);
     }
 
+    /**
+     * Возвращает актуальный список мер.
+     * 1) Сначала пробует найти уровень мер в columns.levels (работает для 2+ мер).
+     * 2) Если такого уровня нет (одна мера) — берёт меры из valueSources.
+     */
+    private getCurrentMeasures(): powerbi.DataViewMetadataColumn[] {
+        const matrix = this.currentDataView?.matrix;
+        if (!matrix) return [];
+
+        // 1) Попытка через columns.levels
+        const levelMeasures = matrix.columns?.levels
+            ?.find(level => level.sources.some(source => source.isMeasure))
+            ?.sources || [];
+
+        if (levelMeasures.length > 0) {
+            return levelMeasures.filter(s => s.isMeasure);
+        }
+
+        // 2) Fallback — valueSources
+        const valueSources = (matrix as any).valueSources as powerbi.DataViewMetadataColumn[] | undefined;
+        if (valueSources && valueSources.length > 0) {
+            return valueSources.filter(vs => vs.isMeasure || (vs.roles && (vs.roles as any).Value));
+        }
+
+        return [];
+    }
+
     public getFormattingModel(): powerbi.visuals.FormattingModel {
         try {
+            // Пересчитываем меры на случай, если getFormattingModel вызван первым
+            const measures = this.getCurrentMeasures();
+            this.measureNames = measures.map(m => m.displayName);
+            this.measureInfos = measures.map(m => {
+                const t: any = m.type || {};
+                return {
+                    name: m.displayName || "",
+                    isNumeric: !!(t.numeric || t.integer || t.decimal)
+                };
+            });
+
             this.updateSpecificColumnGroups();
             return this.formattingSettingsService.buildFormattingModel(this.settings);
         } catch (err) {
@@ -202,9 +237,6 @@ export class Visual implements IVisual {
         tbody.appendChild(totalRow);
     }
 
-    /**
-     * Строит путь из identity индексов: "0-1-2" и ищет узел.
-     */
     private findNodeByPath(root: powerbi.DataViewMatrixNode, path: string): powerbi.DataViewMatrixNode[] | null {
         if (!path) return [root];
         const parts = path.split("-");
@@ -341,7 +373,6 @@ export class Visual implements IVisual {
                 }
             }
 
-            // Обработчик кликов: использует путь из identityIndex
             formattedMatrix.addEventListener("click", (e) => {
                 const target = e.target as HTMLElement;
                 const expandBtn = target.closest(".expandCollapseButton") as HTMLElement;
@@ -370,7 +401,6 @@ export class Visual implements IVisual {
         }
     }
 
-    // Экспорт
     private handleExportClick(cntRows: number): void {
         if (this.isExporting) return;
         console.log("=== Starting data export process ===");
