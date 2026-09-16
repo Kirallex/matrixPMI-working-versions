@@ -62,7 +62,7 @@ export class ConditionalFormatting {
             });
         }
 
-        console.log(`[CF] applyRules: applied to ${appliedCells} cells`);
+        //console.log(`[CF] applyRules: applied to ${appliedCells} cells`);
     }
 
     private static extractRules(group: MeasureCFGroupCard, measureIndex: number): RuleView[] {

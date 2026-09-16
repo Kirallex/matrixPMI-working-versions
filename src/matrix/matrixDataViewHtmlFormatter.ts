@@ -20,7 +20,24 @@ export class MatrixDataviewHtmlFormatter {
         let columnSourceIndices: number[] = [];
         if (matrix.columns?.root) {
             const leafNodes = this.collectLeafNodesInOrder(matrix.columns.root);
-            columnSourceIndices = leafNodes.map(node => node.levelSourceIndex !== undefined ? node.levelSourceIndex : -1);
+            columnSourceIndices = leafNodes.map(node => {
+                // 1) Прямое поле на узле (некоторые формы DataView)
+                if ((node as any).levelSourceIndex !== undefined) {
+                    return (node as any).levelSourceIndex;
+                }
+                // 2) Основной путь: индекс лежит в levelValues.
+                //    Для иерархий берём последний уровень — это мера, к которой относится столбец.
+                const lvs = (node as any).levelValues;
+                if (lvs && lvs.length > 0) {
+                    const last = lvs[lvs.length - 1];
+                    if (last && last.levelSourceIndex !== undefined) {
+                        return last.levelSourceIndex;
+                    }
+                }
+                return -1;
+            });
+
+            //console.log("[formatter] columnSourceIndices =", columnSourceIndices);
         }
 
         // Извлекаем форматы для уровней строк (для дат)
@@ -472,13 +489,22 @@ export class MatrixDataviewHtmlFormatter {
             }
 
             if (value != null && value.value != null) {
-                let sourceIndex = value.valueSourceIndex;
-                if (sourceIndex === undefined) {
-                    sourceIndex = colIndex;
-                }
-                const formattedValue = this.formatValue(value.value, sourceIndex, valueSources);
-                tdElement.appendChild(document.createTextNode(formattedValue));
+            let sourceIndex: number | undefined;
+
+            // Приоритет №1: индекс из иерархии columns (если он валиден ≥ 0).
+            if (columnSourceIndices
+                && columnSourceIndices[colIndex] !== undefined
+                && columnSourceIndices[colIndex] >= 0) {
+                sourceIndex = columnSourceIndices[colIndex];
             }
+            if (sourceIndex === undefined) {
+                const vsi = (value as any).valueSourceIndex;
+                sourceIndex = (typeof vsi === 'number' && vsi >= 0) ? vsi : 0;
+            }
+
+            const formattedValue = this.formatValue(value.value, sourceIndex, valueSources);
+            tdElement.appendChild(document.createTextNode(formattedValue));
+        }
             trElement.appendChild(tdElement);
         }
     }
