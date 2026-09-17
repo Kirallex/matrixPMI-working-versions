@@ -25,44 +25,135 @@ export class ConditionalFormatting {
         cfCard: ConditionalFormattingCard,
         measures: CFMeasureInfo[]
     ): void {
-        if (!cfCard) return;
+        if (!cfCard || !measures || measures.length === 0) return;
 
         const groups = cfCard.groups as MeasureCFGroupCard[];
+
+        // 1) Карта: позиция столбца (из <th id="N">) → индекс меры в measures[]
+        const columnToMeasure = this.buildColumnToMeasureMap(grid, measures);
+        //console.log("[CF] columnToMeasure =", Array.from(columnToMeasure.entries()));
+
+        // 2) Обратная карта: индекс меры → список позиций столбцов
+        const measureToColumns = new Map<number, number[]>();
+        columnToMeasure.forEach((measureIdx, colPos) => {
+            let arr = measureToColumns.get(measureIdx);
+            if (!arr) {
+                arr = [];
+                measureToColumns.set(measureIdx, arr);
+            }
+            arr.push(colPos);
+        });
+
         let appliedCells = 0;
 
         for (let m = 0; m < groups.length && m < measures.length; m++) {
             const group = groups[m];
             if ((group as any).visible === false) continue;
 
-            const cells = grid.querySelectorAll(`tbody td[id="${m}"]`);
-            if (cells.length === 0) continue;
+            const columns = measureToColumns.get(m);
+            if (!columns || columns.length === 0) continue;
 
             const rules = this.extractRules(group, m);
             if (rules.length === 0) continue;
 
             const isNumeric = measures[m].isNumeric;
 
-            cells.forEach(td => {
-                const cell = td as HTMLElement;
-                const row = cell.parentElement;
-                // Grand total не трогаем
-                if (!row?.classList.contains("midRow")) return;
+            // Применяем ко ВСЕМ столбцам, где встречается эта мера
+            for (const colPos of columns) {
+                const cells = grid.querySelectorAll(`tbody td[id="${colPos}"]`);
+                cells.forEach(td => {
+                    const cell = td as HTMLElement;
+                    const row = cell.parentElement;
+                    // Grand total не трогаем — только строки данных.
+                    if (!row?.classList.contains("midRow")) return;
 
-                // Перебираем правила сверху вниз, применяем первое совпавшее
-                for (let r = 0; r < rules.length; r++) {
-                    const rule = rules[r];
-                    if (!rule.enabled) continue;
-                    if (!this.matchesRule(cell, rule, isNumeric)) continue;
+                    for (let r = 0; r < rules.length; r++) {
+                        const rule = rules[r];
+                        if (!rule.enabled) continue;
+                        if (!this.matchesRule(cell, rule, isNumeric)) continue;
 
-                    if (rule.backgroundColor) cell.style.backgroundColor = rule.backgroundColor;
-                    if (rule.fontColor) cell.style.color = rule.fontColor;
-                    appliedCells++;
-                    break;
-                }
-            });
+                        if (rule.backgroundColor) cell.style.backgroundColor = rule.backgroundColor;
+                        if (rule.fontColor) cell.style.color = rule.fontColor;
+                        appliedCells++;
+                        break;
+                    }
+                });
+            }
         }
 
         //console.log(`[CF] applyRules: applied to ${appliedCells} cells`);
+    }
+
+    /**
+     * Строит карту: позиция столбца → индекс меры в measures[].
+     *
+     * Читает шапку таблицы: последняя строка <thead> — это строка мер,
+     * где каждый <th class="formatColumnNodes" id="N"> содержит display-имя меры.
+     * Сопоставляет текст с measures[i].name (без учёта регистра и пробелов).
+     */
+    private static buildColumnToMeasureMap(
+        grid: HTMLElement,
+        measures: CFMeasureInfo[]
+    ): Map<number, number> {
+        const map = new Map<number, number>();
+        if (!measures || measures.length === 0) return map;
+
+        const thead = grid.querySelector("thead");
+        if (!thead) return map;
+
+        const rows = Array.from(thead.querySelectorAll("tr"));
+        if (rows.length === 0) return map;
+
+        // Строка мер — последняя <tr> в <thead>.
+        const measuresRow = rows[rows.length - 1];
+        const headerCells = Array.from(
+            measuresRow.querySelectorAll("th")
+        ) as HTMLTableCellElement[];
+
+        // Случай 1: всего одна мера. Все столбцы с id принадлежат ей.
+        if (measures.length === 1) {
+            for (const th of headerCells) {
+                const idAttr = th.getAttribute("id");
+                if (idAttr == null) continue;
+                const colPos = parseInt(idAttr, 10);
+                if (isNaN(colPos)) continue;
+                map.set(colPos, 0);
+            }
+            return map;
+        }
+
+        // Случай 2: несколько мер. Сопоставляем по тексту заголовка.
+        const nameToIndex = new Map<string, number>();
+        for (let i = 0; i < measures.length; i++) {
+            const key = this.normalizeName(measures[i].name);
+            if (key && !nameToIndex.has(key)) {
+                nameToIndex.set(key, i);
+            }
+        }
+
+        for (const th of headerCells) {
+            const idAttr = th.getAttribute("id");
+            if (idAttr == null) continue;
+            const colPos = parseInt(idAttr, 10);
+            if (isNaN(colPos)) continue;
+
+            const text = this.normalizeName(th.textContent || "");
+            const measureIdx = nameToIndex.get(text);
+            if (measureIdx !== undefined) {
+                map.set(colPos, measureIdx);
+            }
+        }
+
+        return map;
+    }
+
+    private static normalizeName(name: string | undefined): string {
+        if (!name) return "";
+        return name
+            .replace(/\u00A0/g, " ")   // NBSP → обычный пробел
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase();
     }
 
     private static extractRules(group: MeasureCFGroupCard, measureIndex: number): RuleView[] {
@@ -80,7 +171,6 @@ export class ConditionalFormatting {
             const enabledSlice = byName.get(`${p}_enabled`);
             if (!enabledSlice) continue;
 
-            // Пороги теперь хранятся как TextInput — парсим строку в число
             const v1 = this.parseNumeric(byName.get(`${p}_value1`)?.value ?? "0") ?? 0;
             const v2 = this.parseNumeric(byName.get(`${p}_value2`)?.value ?? "0") ?? 0;
 
@@ -142,27 +232,18 @@ export class ConditionalFormatting {
     }
 
     /**
-     * Парсит строку в число. Если в исходной строке есть символ '%',
-     * результат делится на 100 (проценты приводятся к доле: 90% → 0.9).
-     *
-     * Примеры:
-     *   "90%"        → 0.9
-     *   "0,86"       → 0.86
-     *   "1 234,56"   → 1234.56
-     *   "$1,234.56"  → 1234.56
-     *   "-12.5%"     → -0.125
-     *   "abc"        → null
+     * Парсит строку в число. Если есть символ '%', делит на 100.
+     * Примеры: "90%" → 0.9; "0,86" → 0.86; "1 234,56" → 1234.56.
      */
     private static parseNumeric(text: string): number | null {
         if (!text) return null;
 
         const isPercent = text.indexOf("%") !== -1;
 
-        // Убираем всё, кроме цифр, точки, запятой, минуса и пробелов
-        let c = text
-            .replace(/\s/g, "")           // убираем разделители разрядов
-            .replace(/,/g, ".")           // запятая → точка
-            .replace(/[^\d.\-]/g, "");    // убираем всё лишнее (%, $, буквы)
+        const c = text
+            .replace(/\s/g, "")
+            .replace(/,/g, ".")
+            .replace(/[^\d.\-]/g, "");
 
         if (!c || c === "-" || c === ".") return null;
 
