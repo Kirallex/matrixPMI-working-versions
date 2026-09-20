@@ -26,6 +26,8 @@ import { applyColumnWidthsFromSettings } from "./settings/columnWidth";
 import { VisualSettings, MeasureCard, ColumnWidthCard, CFMeasureInfo } from "./settings/settings";
 import { applyBorderSettings } from "./settings/borderSettings";
 import { ConditionalFormatting } from "./settings/conditionalFormatting";
+const HEIGHT_OBJECT_NAME = "heightSettings";
+const HEIGHT_PROPERTY_NAME = "customHeight";
 
 export class Visual implements IVisual {
     private target: HTMLElement;
@@ -73,6 +75,18 @@ export class Visual implements IVisual {
             VisualSettings,
             options.dataViews[0]
         ) as VisualSettings;
+
+        // Читаем сохранённую пользователем высоту из состояния визуала
+        const savedHeight = (options.dataViews[0].metadata as any)
+            ?.objects?.[HEIGHT_OBJECT_NAME]?.[HEIGHT_PROPERTY_NAME];
+
+        if (typeof savedHeight === "number" && savedHeight > 0) {
+            this.currentHeight = savedHeight;
+            console.log("[update] restored height =", savedHeight);
+        } else {
+            // Если пользователь высоту не задавал — сбрасываем, чтобы применилась дефолтная
+            this.currentHeight = null;
+        }
 
         // --- Извлекаем меры (работает и для одной, и для нескольких) ---
         const measures = this.getCurrentMeasures();
@@ -395,9 +409,41 @@ export class Visual implements IVisual {
                 this.selectionManager.toggleExpandCollapse(selectionId);
             });
 
-            HeightResizer.init(formattedMatrix, (newHeight: number) => {
-                this.currentHeight = newHeight;
+            HeightResizer.init(
+                formattedMatrix,
+                // onResize — live-preview, ничего не сохраняем
+                (newHeight: number) => {
+                    this.currentHeight = newHeight;
+                },
+                // onCommit — финальная высота на mouseup, сохраняем в состояние визуала
+                (finalHeight: number) => {
+                    this.currentHeight = finalHeight;
+                    this.persistHeight(finalHeight);
+                }
+            );
+        }
+    }
+
+    private persistHeight(height: number): void {
+        try {
+            const emptySelector = this.host
+            .createSelectionIdBuilder()
+            .createSelectionId()
+            .getSelector();
+            this.host.persistProperties({
+                merge: [
+                    {
+                        objectName: HEIGHT_OBJECT_NAME,
+                        selector: emptySelector,
+                        properties: {
+                            [HEIGHT_PROPERTY_NAME]: Math.round(height)
+                        }
+                    }
+                ]
             });
+            //console.log("[persistHeight] saved height =", height);
+        } catch (err) {
+            console.error("[persistHeight] failed:", err);
         }
     }
 

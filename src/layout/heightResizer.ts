@@ -4,13 +4,27 @@ export class HeightResizer {
     private static handle: HTMLElement | null = null;
     private static startY: number = 0;
     private static startHeight: number = 0;
+    private static currentHeight: number = 0;
     private static minHeight: number = 100;
     private static onResizeCallback: ((height: number) => void) | null = null;
+    private static onCommitCallback: ((height: number) => void) | null = null;
 
-    public static init(container: HTMLElement, onResize?: (height: number) => void): void {
+    /**
+     * @param container       DOM-элемент, чью высоту меняем
+     * @param onResize        вызывается на каждом mousemove (для live-обновления)
+     * @param onCommit        вызывается на mouseup — когда изменение высоты завершено.
+     *                        Именно тут нужно сохранять высоту через persistProperties.
+     */
+    public static init(
+        container: HTMLElement,
+        onResize?: (height: number) => void,
+        onCommit?: (height: number) => void
+    ): void {
         this.cleanup();
         this.onResizeCallback = onResize || null;
+        this.onCommitCallback = onCommit || null;
         this.container = container;
+        this.currentHeight = container.offsetHeight;
 
         if (getComputedStyle(container).position === 'static') {
             container.style.position = 'relative';
@@ -30,8 +44,6 @@ export class HeightResizer {
         `;
         container.appendChild(this.handle);
 
-        //console.log('HeightResizer: handle created', this.handle);
-
         this.handle.addEventListener('mousedown', this.onMouseDown);
         document.addEventListener('mousemove', this.onMouseMove);
         document.addEventListener('mouseup', this.onMouseUp);
@@ -43,28 +55,31 @@ export class HeightResizer {
         this.resizing = true;
         this.startY = e.clientY;
         this.startHeight = this.container.offsetHeight;
+        this.currentHeight = this.startHeight;
         document.body.style.cursor = 'ns-resize';
         document.body.style.userSelect = 'none';
-        //console.log('HeightResizer: mousedown', this.startY, this.startHeight);
     };
 
     private static onMouseMove = (e: MouseEvent): void => {
         if (!this.resizing || !this.container) return;
         const diff = e.clientY - this.startY;
         const newHeight = Math.max(this.minHeight, this.startHeight + diff);
+        this.currentHeight = newHeight;
         this.container.style.height = newHeight + 'px';
         if (this.onResizeCallback) {
             this.onResizeCallback(newHeight);
         }
-        //console.log('HeightResizer: mousemove', newHeight);
     };
 
-    private static onMouseUp = (e: MouseEvent): void => {
-        if (this.resizing) {
-            this.resizing = false;
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-            //console.log('HeightResizer: mouseup');
+    private static onMouseUp = (_e: MouseEvent): void => {
+        if (!this.resizing) return;
+        this.resizing = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+
+        // Коммитим финальную высоту — теперь её можно сохранить через persistProperties
+        if (this.onCommitCallback) {
+            this.onCommitCallback(this.currentHeight);
         }
     };
 
@@ -79,5 +94,6 @@ export class HeightResizer {
         this.container = null;
         this.resizing = false;
         this.onResizeCallback = null;
+        this.onCommitCallback = null;
     }
 }

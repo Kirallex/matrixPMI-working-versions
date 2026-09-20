@@ -1316,6 +1316,15 @@
                 "cf_measure_29_rule_2_backgroundColor": { "type": { "fill": { "solid": { "color": true } } } },
                 "cf_measure_29_rule_2_fontColor": { "type": { "fill": { "solid": { "color": true } } } }
             }
+        },
+
+        "heightSettings": {
+            "displayName": "Height settings",
+            "properties": {
+                "customHeight": {
+                    "type": { "numeric": true }
+                }
+            }
         }
     },
     "subtotals": {
